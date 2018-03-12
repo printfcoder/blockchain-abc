@@ -27,6 +27,7 @@ Hash运算有以下几个主要的特点：
 <li>确定的数据只有一个hash值且这个hash值是唯一的</li>
 <li>改变数据的任一byte都会造成hash值变动</li>
 </ul>
+
 ![](https://printfcoder.github.io/myblog/assets/images/blockchain/abc/hashing-example.png)
 
 Hash运算广泛应用于数据一致性的验证。很多线上软件商店都会把软件包的hash值公开，用户下载后自行计算hash值后验证和供应商的是否一致，就可判断软件是否被篡改过。
