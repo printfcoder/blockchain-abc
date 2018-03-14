@@ -1,506 +1,551 @@
-# Golang 区块链入门 第三节 持久化和命令行接口
+# Golang 区块链入门 第四节 交易第一章
 
-在本系列的前面几篇文章中，我们编写了一个拥有挖矿能力的PoW系统，我们的实现逐步接近全功能的区块链，但是我们没有实现一些非常重要的特性。今天我们要实现区块链持久化，然后再做一个简单的CLI[command-line interface]来操作区块链。本质上，区块链就是分布式的数据库。我们暂先忽略“分布式”，把精力集中在“数据库”上。
+交易是Bitcoin比特币中的核心，而区块链的目标就是用安全可靠的方式存储交易，要使得没有人可以在交易和区块一旦被创建后再也不能被任何人篡改。本节我们开始实现交易，但是由于交易是区块链中相当大的课题，这里分成两个部分：本章，只实现普通的交易机制。第二章才会由简入深。
 
 [原文][原文]（略有删改）
 
-# 数据库选型
+## There is no spoon <sup><a href="#there_is_no_spoon_mean">[1]</a><sup>
 
-直到现在，我们的区块链实现中还没有用到数据库，我们只是把每次启动程序计算得到的区块储存在内存中。我们不能复用一个之前生成的区块链，也不能与他人分享，因此，现在我们要把它存在磁盘上。
+如果你曾经做过关于交易的web应用，那么会应该会创建类似的两张表，**account**，**transaction**。account表用于存放用户信息和余额，而金额交易记录会存在transaction表。而在比特币中，支付是完全不同的方式：
 
-那该选择什么样的数据库？其实任何一种都可以。在[比特币文档][bitcoin_pdf]中，没有说要一个具体的数据库，所以这取决于开发者。[Bitcoin Core](https://github.com/bitcoin/bitcoin)用的是[LevelDB](https://github.com/google/leveldb)。本篇教程中使用`BoltDB`。
+1. 没有账户
+2. 没有余额
+3. 没有地址
+4. 没有货币
+5. 没有支付方和收款方
 
-# BoltDB
+因为区块链是公用和开放的数据库，所以并不会存放敏感的有关钱包的数据。货币并不在账户中，交易也不是把钱从一个地址转到另一个地址。也没有字段或属性来保存账户的余额。只有交易本身，那又有什么在交易里呢？所以，这将会摧毁生活给我们树下的交易固有概念，也就是说 **There is no spoon**。
 
-BoltDB有如下特性：
+## 比特币交易
 
-1. 小而简约
-2. 使用Go实现
-3. 不需要单独部署
-4. 支持我们的数据结构
-
-它的[Github](https://github.com/boltdb/bolt)中这样描述
-
-> Bolt is a pure Go key/value store inspired by Howard Chu's LMDB project. The goal of the project is to provide a simple，fast, and reliable database for projects that don't require a full database server such as Postgres or MySQL. 
-
-> Bolt受Howard Chu的LMDB项目启发，纯Golang编写的key/value数据库。应运只需要简单、快速、可靠，不需要全数据库（如Mysql）功能的项目而生。
-
-> Since Bolt is meant to be used as such a low-level piece of functionality, simplicity is key. The API will be small and only focus on getting values and setting values. That's it.
-
-> 使用Bolt意味着只需要用到很少的（数据库）功能，所以足够简单是关键。而它的API只专注于值的读写。
-
-是吧，我们只要这些功能。再稍稍多赘述一点它的信息。
-
-BoltDB是基于key/value存储，即是没有像SQL关系性数据库（MySQL、PG）那样的的表，也没有行、列。而数据只存在于Key-value结构中（和Golang的maps很像）。Key-value存放在和SQL的表功能差不多的桶（buckets）中，所以要得到值，就得知道“桶”和“key”。
-
-还有一点比较重要的是，BoltDB是没有数据类型的，key和value都是byte型的数组。因为我们要存储Golang的结构体（比如`Block`），所以会把这些结构体序列化。我们会使用[encoding/gob](https://golang.org/pkg/encoding/gob/)来`序列/解序列化`结构体，当然也可以使用 `JSON`、`XML`、`Protocol Buffers`等方案，使用它主要是简单，而且它也是Golang库标准的一部分。
-
-# 数据结构
-
-在实现持久化之前，我们得先搞清楚要怎么存储，先看看Bitcoin Core是怎么搞的。
-
-简单而言，Bitcoin Core用了两个“buckets”来储存数据：
-
-1. `blocks` 存储了该链中所有的区块的元数据
-2. `chainstate` 存储链的状态，储存当前未完成的事务信息及其它一些元数据。
-
-各区块是存储在磁盘上独立的文件当中。这么做的机制是为了保证读取一个区块不会加载所有（或部分）区块到内存中。这个特性我们现在也不去实现它。
-
-在 **blocks** 中，key->value对有：
-
-> 1. 'b' + 32-byte block hash -> block index record
-> 2. 'f' + 4-byte file number -> file information record
-> 3. 'l' -> 4-byte file number: the last block file number used
-> 4. 'R' -> 1-byte boolean: whether we're in the process of reindexing
-> 5. 'F' + 1-byte flag name length + flag name string -> 1 byte boolean: various flags that can be on or off
-> 6. 't' + 32-byte transaction hash -> transaction index record
-
-翻译一下
-
-> 1. 'b' + 32-byte 该块的hash码 -> 块索引记录
-> 2. 'f' + 4-byte 文件编号 -> 文件信息记录
-> 3. 'l' -> 4-byte 文件编号: 最后一块文件的编号
-> 4. 'R' -> 1-byte 布尔值: 标记是否正在重置索引
-> 5. 'F' + 1-byte 标记名长度 + 标记名 -> 1 byte boolean: 各种可关可开的标记
-> 6. 't' + 32-byte 交易的hash值 -> 交易的索引记录
-
-在 **chainstate**, key->value对有：
-
-> 1. 'c' + 32-byte transaction hash -> unspent transaction output record for that transaction
-> 2. 'B' -> 32-byte block hash: the block hash up to which the database represents the unspent transaction outputs
-
-翻译一下
-
-> 1. 'c' + 32-byte 交易的hash值 -> 未完成的交易记录
-> 2. 'B' -> 32-byte 块hash值: 块的hash值，直到数据库记录交易完成
- 
-[更为详细的解释](https://en.bitcoin.it/wiki/Bitcoin_Core_0.11_(ch_2):_Data_Storage)
-
-因为我们现在还没有交易，所以暂时只有 **Blocks**，还有就是现在我们不把区块各自存在独立的文件中，而把整个DB当作一个文件存储Blocks。所以我们不需要任何关联到文件的数字。
-
-所以，**Blocks**就简化成这样：
-
-> 1. 32-byte block-hash -> Block structure (serialized)
-> 2. 'l' -> the hash of the last block in a chain
-
-下面开始实现持久化机制
-
-# 序列化
-
-由于BoltDB只能存储byte数组，所以先给**Block**实现序列化方法。
+比特币的交易结构中，input与output是在一起的（[input与output][input与output]进一步阐述）：
 
 ```golang
-func (b *Block) Serialize() []byte {
-	var result bytes.Buffer
+type Transaction struct {
+	ID   []byte
+	Vin  []TXInput
+	Vout []TXOutput
+}
+```
+
+新交易input会关联到前一笔output（有例外，稍后补充）。output是比特币真实存储的地方。下面的这张图展示了交易的关系：
+
+![](https://printfcoder.github.io/myblog/assets/images/blockchain/abc/transactions-diagram.png)
+
+注意：
+
+1. 有output是没有与input关联的
+2. 在一笔交易中，input可以与不同的交易中的output相关联。
+3. 而input一定是会关联一笔output的
+
+本章全篇，我们使用了“钱”、“币”、“消费”、“发送”、“账户”等等，而比特币里是没有这些概念的。交易中（比特币机制）会使用脚本（[script][script]）锁住相关的值，然后也只有加锁的才能解开这锁。
+
+## 交易output
+
+从output的结构开始：
+
+```golang
+type TXOutput struct {
+	Value        int
+	ScriptPubKey string
+}
+```
+
+事实上，output保存了“币”（上面的**Value**）。保存的意思是使用一串无法破解的方式（谜，puzzle）锁住这些币，这个puzzle就存储在**ScriptPubKey**中。在内部，Bitcoin使用了一种叫做*Script*的脚本语言，用这个Script来定义output锁和解锁的逻辑。这个语言是相当原始的，故意这样做是为了避免被攻击和滥用，但是这里不进行深一步的讨论。可以在[这里][script]找到更详细的解释。
+
+> In Bitcoin, the value field stores the number of satoshis, not the number of BTC. A satoshi is a hundred millionth of a bitcoin (0.00000001 BTC), thus this is the smallest unit of currency in Bitcoin (like a cent).
+
+> 在比特币中，value保存了satoshis的数量，并不是BTC的值。一个satoshis就是一亿分之一个BTC，所以这是比特币当前最小的单位（差不多是相当于分）
+
+因为我们现在还没有实现地址（address)，所以我们会避免整个和脚本有关的逻辑。**ScriptPubKey**也会随便插入一个字符串（用户定义的钱包地址）。
+
+> 顺便说一句，使用脚本语言意味着比特币可以也作为智能合约平台。
+
+还有一个重要的事情是output是不能分隔的，所以你不能只引用它的一部分。如果一个output在一个交易中被关联，那么它就会全部消费掉。而如果该output的值是大于交易所需的，那么会有一笔“change”产生并返回发送者（消费者）。这和现实生活中的交易是差不多的，比如花5美元的纸币去买值1美元的东西，那你会收到4美元的找零。
+
+## 交易input
+
+input的结构
+
+```golang
+type TXInput struct {
+	Txid      []byte
+	Vout      int
+	ScriptSig string
+}
+```
+
+先前提到，input引用了前面的output。**Txid**存储了交易的id，而**Vout**则保存该交易的中一个output索引。**ScriptSig**就是负责提供在与output的**ScriptPubKey**中对比的数据，如果数据正确，那么这个被引用的output就可以被解锁，而它里面的值可以产生新的output。如果不正确，这个output就不能被这个input引用。这个机制就避免了有人会去消费别人的比特币。
+
+再强调一点，因为我们还没有地址（address)，**ScriptSig**仅只是保存了一个任意的用户定义的钱包地址。我们将在下一章中实现公钥和签名检测。
+
+总结一下，output就是“币”存的位置。每一个output都来自一个解锁了的script，这人script决定了解锁这个output的逻辑。每一个新的交易都必须有一个input和output。而input关联的前面的交易中的output，并且提供数据（**ScriptSig**字段）去解锁output和它里面的币而后用这些币去创建新的output。
+
+那接下来，是先有input还是output呢？
+
+## 先有蛋再有鸡
+
+在比特币的世界里，是先鸡再有蛋。输入关联输出的逻辑（ inputs-referencing-outputs logic ）就是经典的“先有鸡还是先有蛋”问题的情况：由input生成output，然后output使得input的过程行得通。而在比特币中，output比input出现得早，input是鸡，output是蛋。
+
+当矿机开始去挖一个区块时，它增加了**[coinbase][Coinbase] transaction**的交易。而“coinbase transaction”是一种特殊类型的交易，它不需要任何output。它会无中生有output（比如：“币”）。从而蛋不是鸡生的。这是给矿工挖出新区块的奖励。
+
+前面的章节里提到的**创世区块**就是整个区块链的起始点。就是这个创世区块在区块链中生成了第一个output。因为没有更早的交易，所以没有更早的output。
+
+创建coinbase的交易：
+
+```golang
+func NewCoinbaseTX(to, data string) *Transaction {
+	if data == "" {
+		data = fmt.Sprintf("Reward to '%s'", to)
+	}
+
+	txin := TXInput{[]byte{}, -1, data}
+	txout := TXOutput{subsidy, to}
+	tx := Transaction{nil, []TXInput{txin}, []TXOutput{txout}}
+	tx.SetID()
+
+	return &tx
+}
+```
+
+一个coinbase交易只能有一个input。在我们的实现里，**Txid**是空的，而**Vout**是-1。另外，coinbase也不需要存储**ScriptSig**。相反，有任意的数据存储在这里。
+
+> In Bitcoin, the very first coinbase transaction contains the following message: “The Times 03/Jan/2009 Chancellor on brink of second bailout for banks”. [You can see it yourself][first_transaction].
+
+> 比特币中， 最新的coinbase交易消息里有这么一段：“[《泰晤士报》，2009年1月3日，财政大臣正站在第二轮救助银行业的边缘][first_transaction]”。
+
+**subsidy**补贴就是奖励的数量。在比特币中，这个数字并没有保存在任何地方，也仅是通过区块的总数计算出来：区块的总数除以**210000**。挖出创世区块价值50个BTC，每210000块区块被挖出，比特币单位产量就会减半（210001块到420000块时，只值25BTC了）。在我们的实现中，我们将会用一个常量来存储这个奖励（目前来说是如此😉）。
+
+
+## 保存交易
+
+现在，每个区块都必须至少保存一笔交易，并且再也不可能不通过交易而挖出新区块。这意味着我们应该删除**Block**类中的**Data**字段，换成**Transactions**。
+
+```golang
+type Block struct {
+	Timestamp     int64
+	Transactions  []*Transaction
+	PrevBlockHash []byte
+	Hash          []byte
+	Nonce         int
+}
+```
+
+**NewBlock**及**NewGenesisBlock**也要相应作更改。
+
+```golang
+func NewBlock(transactions []*Transaction, prevBlockHash []byte) *Block {
+	block := &Block{time.Now().Unix(), transactions, prevBlockHash, []byte{}, 0}
 	...
-	encoder := gob.NewEncoder(&result)
-	err := encoder.Encode(b)
-    ...
-	return result.Bytes()
+}
+
+func NewGenesisBlock(coinbase *Transaction) *Block {
+	return NewBlock([]*Transaction{coinbase}, []byte{})
 }
 ```
 
-再实现解序列化方法
+下一个改动的是创建新区块链：
 
 ```golang
-func DeserializeBlock(d []byte) *Block {
-	var block Block
-    ...
-	decoder := gob.NewDecoder(bytes.NewReader(d))
-	err := decoder.Decode(&block)
-    ...
-	return &block
-}
-```
-
-# 持久化
-
-我们先从优化 **NewBlockchain** 方法开始。之前这个方法只能创建新的区块链再增加创世区块到链中。现在它加上以下这些能力：
-
-1. 打开DB文件
-2. 检测是否已经有区块链存在
-3. 如果存在
-   1. 创建新**区块链**实例
-   2. 把刚建的这个区块链信息的作为最后一块区块hash塞到DB中。
-4. 如果不存在
-   1. 创建新的创世区块
-   2. 存储到DB中
-   3. 把创世区块的hash作为末端hash
-   4. 创建新的区块链，把它的信息指向创世区块
-
-转化为代码：
-
-```golang
-func NewBlockchain() *Blockchain {
-	var tip []byte
-
-	db, err := bolt.Open(dbFile, 0600, nil)
-    ...
+func CreateBlockchain(address string) *Blockchain {
+	...
 	err = db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
+		cbtx := NewCoinbaseTX(address, genesisCoinbaseData)
+		genesis := NewGenesisBlock(cbtx)
 
-		if b == nil {
-			genesis := NewGenesisBlock()
-			b, err := tx.CreateBucket([]byte(blocksBucket))
-			err = b.Put(genesis.Hash, genesis.Serialize())
-			err = b.Put([]byte("l"), genesis.Hash)
-			tip = genesis.Hash
-		} else {
-			tip = b.Get([]byte("l"))
-		}
-
-		return nil
+		b, err := tx.CreateBucket([]byte(blocksBucket))
+		err = b.Put(genesis.Hash, genesis.Serialize())
+		...
 	})
-
-	bc := Blockchain{tip, db}
-
-	return &bc
+	...
 }
 ```
 
-分析一下代码
+**CreateBlockchain**函数使用将存放挖出创世区块的地址**address**
+
+## 工作量证明
+
+“Proof-of-Work”算法必须考虑到存储在区块中的交易，在区块链中，对于存储交易的地方，要保证一致性而可靠性。所以要修改一下**prepareData**方法。
 
 ```golang
-db, err := bolt.Open(dbFile, 0600, nil)
-```
-
-这是打开BoltDB数据库文件的标准方式，**切记：即使没有找到文件，也不会返回错误**
-
-```golang
-err = db.Update(func(tx *bolt.Tx) error {
-...
-})
-```
-
-操作BoltDB需要使用一个参数为事务的回调函数。这里的事务有两种类型--**read-only**，**read-write**。因为我们会把创世区块放到DB中，所以我们使用**read-write**的事务，也就是`db.Update(...)`
-
-```golang
-b := tx.Bucket([]byte(blocksBucket))
-
-if b == nil {
-	genesis := NewGenesisBlock()
-	b, err := tx.CreateBucket([]byte(blocksBucket))
-	err = b.Put(genesis.Hash, genesis.Serialize())
-	err = b.Put([]byte("l"), genesis.Hash)
-	tip = genesis.Hash
-} else {
-	tip = b.Get([]byte("l"))
-}
-```
-这一段是核心，先获取一个`Bucket`用来存储区块：如果桶存在，那么读取 **l**值；如果不存在，则创建创世区块，再创建桶，然后把块扔到桶里，把块的hash值设为 **l** 值。
-
-还有注意新那区块链的方式：
-
-```golang
-bc := Blockchain{tip, db}
-```
-
-这里不再把所有的区块放到区块链中，而是只设置区块的提示信息和db的**连接**（因为在整个程序运行时，区块链会一直保持与数据库的连接）。所以，区块链的结构会被改成：
-
-```golang
-type Blockchain struct {
-	tip []byte
-	db  *bolt.DB
+func (pow *ProofOfWork) prepareData(nonce int) []byte {
+	data := bytes.Join(
+		[][]byte{
+			pow.block.PrevBlockHash,
+			pow.block.HashTransactions(), // This line was changed
+			IntToHex(pow.block.Timestamp),
+			IntToHex(int64(targetBits)),
+			IntToHex(int64(nonce)),
+		},
+		[]byte{},
+	)
+	return data
 }
 ```
 
-下一步是修改 **AddBlock**方法，增加新的区块不再像之前直接把数据传过去那么简单了，现在要把区块存储到db中：
+现在不能使用**pow.block.Data**了，得使用**pow.block.HashTransactions()**：
 
 ```golang
-func (bc *Blockchain) AddBlock(data string) {
-	var lastHash []byte
+func (b *Block) HashTransactions() []byte {
+	var txHashes [][]byte
+	var txHash [32]byte
 
-	err := bc.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
-		lastHash = b.Get([]byte("l"))
-
-		return nil
-	})
-
-	newBlock := NewBlock(data, lastHash)
-
-	err = bc.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
-		err := b.Put(newBlock.Hash, newBlock.Serialize())
-		err = b.Put([]byte("l"), newBlock.Hash)
-		bc.tip = newBlock.Hash
-
-		return nil
-	})
-}
-```
-
-逐段分析一下：
-
-```golang
-err := bc.db.View(func(tx *bolt.Tx) error {
-	b := tx.Bucket([]byte(blocksBucket))
-	lastHash = b.Get([]byte("l"))
-
-	return nil
-})
-```
-
-这里使用的是 **read-only事务**的 **Get** 方法，从l中读取最后一块区块的编码，我们挖下一新块时会作为参数用到。
-
-```golang
-newBlock := NewBlock(data, lastHash)
-b := tx.Bucket([]byte(blocksBucket))
-err := b.Put(newBlock.Hash, newBlock.Serialize())
-err = b.Put([]byte("l"), newBlock.Hash)
-bc.tip = newBlock.Hash
-```
-
-在挖出新块，将其序列化存储到数据库后，把最新的区块hash值更新到 **l** 值中。
-
-# 检查区块
-
-到这一步，区块都保存到数据库了，现在可以把区块链重新加载然后把新块加到里面。但是现在不能再打印区块链中的区块了，因为已经不是把区块保存在数组中了。现在修复这个缺陷。
-
-BoltDB支持遍历一个桶中的所有key，但是这些key都是基于byte-sorted顺序排序的，而我们需要让它们按在区块中的顺序打印出来，我们也不加载所有的区块到内存中（区块可能会很大，没有必要加载完，或者，假装加载完了），先一个一个读取。现在需要一个blockchain的遍历器：
-
-```golang
-type BlockchainIterator struct {
-	currentHash []byte
-	db          *bolt.DB
-}
-```
-
-在每次我们要去遍历整个区块链中的区块时会创建一个该遍历器。遍历器会保存当前遍历到的区块hash和保持与数据库的链接，后者也使得遍历器和该区块链在逻辑上是结合的，因为遍历器数据库连接用的是区块链的同一个，所以，**Blockchain** 会负责创建遍历器：
-
-```golang
-func (bc *Blockchain) Iterator() *BlockchainIterator {
-	bci := &BlockchainIterator{bc.tip, bc.db}
-
-	return bci
-}
-```
-
-注意遍历器用区块链的顶端tip初始化，因此，区块是从顶端到末端，也就是从最老的区块到最新区块。事实上，**选择这个tip意味着给区块链“投票”**。一个区块链会有很多分支，而最长的那支会被认为是主分支。在获致到tip（可以是该区块链中的任何一个区块）之后，就可以重建整个区块链，算出它的长度和重建这个区块的工作量。所以，tip也可以认为是区块链的一个标识符。
-
-**BlockchainIterator** 只做一件事：它负责返回区块链中的下一个区块：
-
-```golang
-func (i *BlockchainIterator) Next() *Block {
-	var block *Block
-
-	err := i.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
-		encodedBlock := b.Get(i.currentHash)
-		block = DeserializeBlock(encodedBlock)
-
-		return nil
-	})
-
-	i.currentHash = block.PrevBlockHash
-
-	return block
-}
-```
-
-到此，整DB小节完了
-
-# CLI 命令行接口
-
-直到现在，我们的实现还没有提供任何操作接口给外界使用。我们先前的例子中在 **main** 函数中执行新建区块链 **NewBlockchain**，还有新增区块 **bc.AddBlock** 的方法。现在可以改善，增加命令行操作接口了。我们需要如下这样的命令：
-
-```shell
-$ blockchain_go addblock "Pay 0.031337 for a coffee"
-$ blockchain_go printchain
-```
-
-所有的命令行关联的操作会被 **CLI** 结构处理：
-
-```golang
-type CLI struct {
-	bc *Blockchain
-}
-```
-
-在 **Run**中加入CLI的接入点：
-
-```golang
-func (cli *CLI) Run() {
-	cli.validateArgs()
-
-	addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
-	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
-
-	addBlockData := addBlockCmd.String("data", "", "Block data")
-
-	switch os.Args[1] {
-	case "addblock":
-		err := addBlockCmd.Parse(os.Args[2:])
-	case "printchain":
-		err := printChainCmd.Parse(os.Args[2:])
-	default:
-		cli.printUsage()
-		os.Exit(1)
+	for _, tx := range b.Transactions {
+		txHashes = append(txHashes, tx.ID)
 	}
+	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
 
-	if addBlockCmd.Parsed() {
-		if *addBlockData == "" {
-			addBlockCmd.Usage()
-			os.Exit(1)
-		}
-		cli.addBlock(*addBlockData)
-	}
-
-	if printChainCmd.Parsed() {
-		cli.printChain()
-	}
+	return txHash[:]
 }
 ```
 
-使用标准的 **flag** 解析这些参数
+我们再一次使用hash作为提供数据唯一表现的机制。必须保证所有交易在区块中都有确定唯一的hash值。为了实现这一点，我们计算每一个交易的hash，把它们连接起来，再计算合起来的hash。
+
+> Bitcoin uses a more elaborate technique: it represents all transactions containing in a block as a [Merkle tree][Merkle_tree] and uses the root hash of the tree in the Proof-of-Work system. This approach allows to quickly check if a block contains certain transaction, having only just the root hash and without downloading all the transactions.
+
+> 比特币使用了更加精细的技术：把所有交易都维护在一棵[默克尔树][Merkle_tree]中，并“Proof-of-Work”工作量证明中使用树根的hash值。这样做可以快速检测是否区块包含有指定的交易，仅需要树的根节点而不需要下载整棵树。
+
+## Output结余
+
+现在需要找出交易中output的结余（UTXO， unspent transaction outputs）。Unspent（结余）意思是这些output并没有关联到任何input，在上面的那张图中，有：
+
+1. tx0, output 1;
+2. tx1, output 0;
+3. tx3, output 0;
+4. tx4, output 0.
+
+当然，我们需要检测余额，并不需要检测上面的全部，只需要检测那些我们的私钥能解锁的output（我们目前没有实现密钥，通过使用用户定义的地址作为替代）。现在定义在input和output上增加加锁和解锁方法：
 
 ```golang
-addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
-printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
-addBlockData := addBlockCmd.String("data", "", "Block data")
-```
+func (in *TXInput) CanUnlockOutputWith(unlockingData string) bool {
+	return in.ScriptSig == unlockingData
+}
 
-首先，创建两个子命令， **addblock** 和 **printfchain**，用 **-add** 标记作为 **addblock** 的参数数据标识。**printfchain** 不用参数：
-
-```golang
-switch os.Args[1] {
-case "addblock":
-	err := addBlockCmd.Parse(os.Args[2:])
-case "printchain":
-	err := printChainCmd.Parse(os.Args[2:])
-default:
-	cli.printUsage()
-	os.Exit(1)
+func (out *TXOutput) CanBeUnlockedWith(unlockingData string) bool {
+	return out.ScriptPubKey == unlockingData
 }
 ```
 
-检测用户输入的参数和解析相关的 **flag** 子命令。
+我们简单地通过比较script的字段来判断是否能解锁。我们会在后面的章节中，等实现了基于私钥创建地址，再实现真正的加解锁。
+
+下一步，找到有结余output的交易，这个比较麻烦：
 
 ```golang
-if addBlockCmd.Parsed() {
-	if *addBlockData == "" {
-		addBlockCmd.Usage()
-		os.Exit(1)
-	}
-	cli.addBlock(*addBlockData)
-}
+func (bc *Blockchain) FindUnspentTransactions(address string) []Transaction {
+  var unspentTXs []Transaction
+  spentTXOs := make(map[string][]int)
+  bci := bc.Iterator()
 
-if printChainCmd.Parsed() {
-	cli.printChain()
+  for {
+    block := bci.Next()
+
+    for _, tx := range block.Transactions {
+      txID := hex.EncodeToString(tx.ID)
+
+    Outputs:
+      for outIdx, out := range tx.Vout {
+        // Was the output spent?
+        if spentTXOs[txID] != nil {
+          for _, spentOut := range spentTXOs[txID] {
+            if spentOut == outIdx {
+              continue Outputs
+            }
+          }
+        }
+
+        if out.CanBeUnlockedWith(address) {
+          unspentTXs = append(unspentTXs, *tx)
+        }
+      }
+
+      if tx.IsCoinbase() == false {
+        for _, in := range tx.Vin {
+          if in.CanUnlockOutputWith(address) {
+            inTxID := hex.EncodeToString(in.Txid)
+            spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
+          }
+        }
+      }
+    }
+
+    if len(block.PrevBlockHash) == 0 {
+      break
+    }
+  }
+
+  return unspentTXs
+}
+```
+因为交易是被存储在区块中的，我们必须去检测区块链中的每一区块。
+
+我们从output开始：
+
+```golang
+if out.CanBeUnlockedWith(address) {
+	unspentTXs = append(unspentTXs, tx)
 }
 ```
 
-解析出的子命令该执行的相关函数：
+如果锁住output的地址和我们传进来的一样，那么我们要找的就是该output。但是在这之前，得检测output是否已经被input引用：
 
 ```golang
-func (cli *CLI) addBlock(data string) {
-	cli.bc.AddBlock(data)
-	fmt.Println("Success!")
-}
-
-func (cli *CLI) printChain() {
-	bci := cli.bc.Iterator()
-
-	for {
-		block := bci.Next()
-
-		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
-		fmt.Printf("Data: %s\n", block.Data)
-		fmt.Printf("Hash: %x\n", block.Hash)
-		pow := NewProofOfWork(block)
-		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
-		fmt.Println()
-
-		if len(block.PrevBlockHash) == 0 {
-			break
+if spentTXOs[txID] != nil {
+	for _, spentOut := range spentTXOs[txID] {
+		if spentOut == outIdx {
+			continue Outputs
 		}
 	}
 }
 ```
 
-现在的代码很像我们之些写的那些。比较不同的是现在使用的是 **BlockchainIterator**去遍历整个区块链中的区块。
-
-最后修改 **main** 函数：
+跳过已经被input引用的，因为这些值已经被移动到其它output中，导致我们不能再去计算它。在检测output后，我们收集了所有能解锁对应地址output的input（这里不适用于coinbase交易，因为它不需要解锁output）：
 
 ```golang
-func main() {
-	bc := NewBlockchain()
+if tx.IsCoinbase() == false {
+    for _, in := range tx.Vin {
+        if in.CanUnlockOutputWith(address) {
+            inTxID := hex.EncodeToString(in.Txid)
+            spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
+        }
+    }
+}
+```
+
+为了计算余额，还需要能把**FindUnspentTransactions**返回的transaction中的output剥出来：
+
+```golang
+func (bc *Blockchain) FindUTXO(address string) []TXOutput {
+       var UTXOs []TXOutput
+       unspentTransactions := bc.FindUnspentTransactions(address)
+
+       for _, tx := range unspentTransactions {
+               for _, out := range tx.Vout {
+                       if out.CanBeUnlockedWith(address) {
+                               UTXOs = append(UTXOs, out)
+                       }
+               }
+       }
+
+       return UTXOs
+}
+```
+
+再给CIL增加**getBalance**指令：
+
+```golang
+func (cli *CLI) getBalance(address string) {
+	bc := NewBlockchain(address)
 	defer bc.db.Close()
 
-	cli := CLI{bc}
-	cli.Run()
+	balance := 0
+	UTXOs := bc.FindUTXO(address)
+
+	for _, out := range UTXOs {
+		balance += out.Value
+	}
+
+	fmt.Printf("Balance of '%s': %d\n", address, balance)
+}
+
+```
+
+账户余额就是有结余的交易中被账户地址锁住的output的value总和。
+
+检测一下挖出创世区块时的余额:
+
+```shell
+$ blockchain_go getbalance -address Ivan
+```
+
+创世区块给我们带来了10个BTC的收益。
+
+## 发送币
+
+现在，我们要把币送给其它人。为了实现这个，需要创建一笔交易，把它设到区块中，然后挖出这个区块。到目前为止，我们的代码也只是实现了coinbase交易，现在需要一个普通的交易。
+
+```golang
+func NewUTXOTransaction(from, to string, amount int, bc *Blockchain) *Transaction {
+	var inputs []TXInput
+	var outputs []TXOutput
+
+	acc, validOutputs := bc.FindSpendableOutputs(from, amount)
+
+	if acc < amount {
+		log.Panic("ERROR: Not enough funds")
+	}
+
+	// Build a list of inputs
+	for txid, outs := range validOutputs {
+		txID, err := hex.DecodeString(txid)
+
+		for _, out := range outs {
+			input := TXInput{txID, out, from}
+			inputs = append(inputs, input)
+		}
+	}
+
+	// Build a list of outputs
+	outputs = append(outputs, TXOutput{amount, to})
+	if acc > amount {
+		outputs = append(outputs, TXOutput{acc - amount, from}) // a change
+	}
+
+	tx := Transaction{nil, inputs, outputs}
+	tx.SetID()
+
+	return &tx
 }
 ```
 
-注意，第一次执行时，如果BoltDB中没有区块链，则无论输入什么参数，都会创建一个区块链。
+在创建新的output前，首先得找到所有有结余的output，并且要有足够的值来消费。**FindSpendableOutputs**方法负责做这事。然后，对于找到的能用的每一个ouput，都会有一个input关联它们。下一步，我们创建两个output：
 
-现在可以检测一下我们的代码是否工作OK了：
+1. 一个被接收者的地址锁住。这个output是真正的被传送到其它地址的币。
+2. 一个被发送者的地址锁住。这个是找零（change）。仅是在进行结余的output的总额大于需要发送给接收者所需值的交易时才会被创建。还有，output是**不可以分隔的**；
 
-先安装BoltDB
-```shell
-$ go get github.com/boltdb/bolt/...
+**FindSpendableOutputs**基于前面定义的**FindUnspentTransactions**方法：
+
+```golang
+func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
+	unspentOutputs := make(map[string][]int)
+	unspentTXs := bc.FindUnspentTransactions(address)
+	accumulated := 0
+
+Work:
+	for _, tx := range unspentTXs {
+		txID := hex.EncodeToString(tx.ID)
+
+		for outIdx, out := range tx.Vout {
+			if out.CanBeUnlockedWith(address) && accumulated < amount {
+				accumulated += out.Value
+				unspentOutputs[txID] = append(unspentOutputs[txID], outIdx)
+
+				if accumulated >= amount {
+					break Work
+				}
+			}
+		}
+	}
+
+	return accumulated, unspentOutputs
+}
 ```
-执行程序：
+
+该方法遍历所有有结余的交易，汇总它们的值，当汇总的值等于或大于需要传送到其它地址的值时，就会停止查找，立即返回已经汇总到的值和以交易id分组的output索引数组。不需要找到比本次传送额更多的output。
+
+现在修改**Blockchain.MineBlock**方法：
+
+```golang
+func (bc *Blockchain) MineBlock(transactions []*Transaction) {
+	...
+	newBlock := NewBlock(transactions, lastHash)
+	...
+}
+```
+
+最后，实现**Send**方法：
+
+```golang
+func (cli *CLI) send(from, to string, amount int) {
+	bc := NewBlockchain(from)
+	defer bc.db.Close()
+
+	tx := NewUTXOTransaction(from, to, amount, bc)
+	bc.MineBlock([]*Transaction{tx})
+	fmt.Println("Success!")
+}
+```
+
+传送币到其它地址，意味着会创建新的交易，然后会通过挖出新的区块，把交易放到该区块中，再把该区块放到区块链的方式让交易得以在区块链中。但是区块链并不会立即做到这一步，相反，它把所有的交易放到存储池中，当矿机准备好挖区块时，它就把存储池中的所有交易拿出来并创建候选的区块。交易只有在包含了该交易的区块被挖出且附加到区块链中时才会被确认。
+
+现在看看传送币的工作是否正常：
 
 ```shell
-$ blockchain_go printchain
-No existing blockchain found. Creating a new one...
-Mining the block containing "Genesis Block"
-000000edc4a82659cebf087adee1ea353bd57fcd59927662cd5ff1c4f618109b
-
-Prev. hash:
-Data: Genesis Block
-Hash: 000000edc4a82659cebf087adee1ea353bd57fcd59927662cd5ff1c4f618109b
-PoW: true
-
-$ blockchain_go addblock -data "Send 1 BTC to Ivan"
-Mining the block containing "Send 1 BTC to Ivan"
-000000d7b0c76e1001cdc1fc866b95a481d23f3027d86901eaeb77ae6d002b13
+$ blockchain_go send -from Ivan -to Pedro -amount 6
+00000001b56d60f86f72ab2a59fadb197d767b97d4873732be505e0a65cc1e37
 
 Success!
 
-$ blockchain_go addblock -data "Pay 0.31337 BTC for a coffee"
-Mining the block containing "Pay 0.31337 BTC for a coffee"
-000000aa0748da7367dec6b9de5027f4fae0963df89ff39d8f20fd7299307148
+$ blockchain_go getbalance -address Ivan
+Balance of 'Ivan': 4
+
+$ blockchain_go getbalance -address Pedro
+Balance of 'Pedro': 6
+```
+
+再创建几笔交易，然后确认多个output在花费过程中是否工作正常：
+
+```golang
+$ blockchain_go send -from Pedro -to Helen -amount 2
+00000099938725eb2c7730844b3cd40209d46bce2c2af9d87c2b7611fe9d5bdf
 
 Success!
 
-$ blockchain_go printchain
-Prev. hash: 000000d7b0c76e1001cdc1fc866b95a481d23f3027d86901eaeb77ae6d002b13
-Data: Pay 0.31337 BTC for a coffee
-Hash: 000000aa0748da7367dec6b9de5027f4fae0963df89ff39d8f20fd7299307148
-PoW: true
+$ blockchain_go send -from Ivan -to Helen -amount 2
+000000a2edf94334b1d94f98d22d7e4c973261660397dc7340464f7959a7a9aa
 
-Prev. hash: 000000edc4a82659cebf087adee1ea353bd57fcd59927662cd5ff1c4f618109b
-Data: Send 1 BTC to Ivan
-Hash: 000000d7b0c76e1001cdc1fc866b95a481d23f3027d86901eaeb77ae6d002b13
-PoW: true
-
-Prev. hash:
-Data: Genesis Block
-Hash: 000000edc4a82659cebf087adee1ea353bd57fcd59927662cd5ff1c4f618109b
-PoW: true
+Success!
 ```
 
+Helen的币被两个output锁（只有自己的地址才能解锁）在了两个output中，一个是Pedro，另一个是Ivan。现在再传给其他人：
+
+```shell
+$ blockchain_go send -from Helen -to Rachel -amount 3
+000000c58136cffa669e767b8f881d16e2ede3974d71df43058baaf8c069f1a0
+
+Success!
+
+$ blockchain_go getbalance -address Ivan
+Balance of 'Ivan': 2
+
+$ blockchain_go getbalance -address Pedro
+Balance of 'Pedro': 4
+
+$ blockchain_go getbalance -address Helen
+Balance of 'Helen': 1
+
+$ blockchain_go getbalance -address Rachel
+Balance of 'Rachel': 3
+```
+
+现在Pedro只有4个币了，再尝试把向Ivan传送5个：
+
+```shell
+$ blockchain_go send -from Pedro -to Ivan -amount 5
+panic: ERROR: Not enough funds
+
+$ blockchain_go getbalance -address Pedro
+Balance of 'Pedro': 4
+
+$ blockchain_go getbalance -address Ivan
+Balance of 'Ivan': 2
+```
+
+正常～
 
 
-# 本章总结
+## 本章总结
 
-本章我们实现了区块的持久化，还有完善了遍历信息来支持按序打印所有的区块。下一章我们将会实现 **address**，**wallet**，**transaction**。敬请期待！
+呼！不是很容易，至少现在有交易了。尽管关键的特性像比特币那样的加密货币还没有实现：
 
-# 相关链接
+1. 地址。我们没有实现真正的地址，基于私钥的地址。
+2. 奖励。现在挖出区块是没有甜头的。
+3. UTXO 集合。获取余额需要查找整个区块，如果有很多的区块链时需要花费非常长的时间。并且，要验证后续的交易，也会花费大量的时间。UTXO集合就是为了解决这个问题，让对整个交易的操作更快些。
+4. 存储池（Mempool）。这里保存那些等着被打包到区块中的交易。在我们的当前的实现里，一个区块只有一个交易，这很没有效率。
+
+
+
+
+## 相关链接
 
 [本文代码][本文代码]
 
-[二三章代码差异](https://github.com/printfcoder/blockchain-abc/compare/part_2...part_3)
+[bitcoin script][script]
 
-[bitcoin_pdf][bitcoin_pdf]
+[交易](https://en.bitcoin.it/wiki/Transaction)
 
-[Bitcoin Core](https://github.com/bitcoin/bitcoin)
+[默克尔树][Merkle_tree]
 
-[Bitcoin 存储](https://en.bitcoin.it/wiki/Bitcoin_Core_0.11_(ch_2):_Data_Storage)
-
-[boltDB](https://github.com/boltdb/bolt)
+[Coinbase][Coinbase]
 
 本序列文章：
 
@@ -510,9 +555,26 @@ PoW: true
 
 [3. Golang 区块链入门 第三节 持久化和命令行接口][本序列第三篇]
 
-[原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-3/
+[4. Golang 区块链入门 第四节 交易 第一章][本序列第四篇]
+
+
+<div id="there_is_no_spoon_mean">
+<sup>[1]</sup>
+<span>这一句是从黑客帝国里借鉴而来，不知道怎么翻译才不失味道，心无外物。大概是说，区块链（或是比特币的交易）并非我们普通的交易那样子</span>
+</div>
+
+[原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-4/
 [bitcoin_pdf]: https://bitcoin.org/bitcoin.pdf
-[本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_3
+[本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_4
+
+[input与output]: /myblog/blockchain/bitcoin/2018/03/10/how-shall-we-understand-the-input-and-output-of-bitcoin/
+[script]: https://en.bitcoin.it/wiki/Script
+
+[first_transaction]: https://blockchain.info/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b?show_adv=true
+[Merkle_tree]: https://en.wikipedia.org/wiki/Merkle_tree
+[Coinbase]: https://en.bitcoin.it/wiki/Coinbase
+
 [本序列第一篇]: /myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
 [本序列第二篇]: /myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
 [本序列第三篇]: /myblog/blockchain/abc/2018/03/07/abc-building-blockchain-in-go-part-3-persistence-and-cli/
+[本序列第四篇]: /myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
