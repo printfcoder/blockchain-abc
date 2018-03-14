@@ -18,7 +18,7 @@
 
 ## 比特币交易
 
-比特币的交易结构中，input与output是在一起的（[input与output][input与output]进一步阐述）：
+比特币的交易结构中，input与output是在一起的（[input与output][input与output]进一步阐述）：
 
 ```golang
 type Transaction struct {
