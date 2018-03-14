@@ -87,7 +87,7 @@ type TXInput struct {
 
 在比特币的世界里，是先鸡再有蛋。输入关联输出的逻辑（ inputs-referencing-outputs logic ）就是经典的“先有鸡还是先有蛋”问题的情况：由input生成output，然后output使得input的过程行得通。而在比特币中，output比input出现得早，input是鸡，output是蛋。
 
-当矿机开始去挖一个区块时，它增加了**[coinbase][Coinbase] transaction**的交易。而“coinbase transaction”是一种特殊类型的交易，它不需要任何output。它会无中生有output（比如：“币”）。从而蛋不是鸡生的。这是给矿工挖出新区块的奖励。
+当矿机开始去挖一个区块时，它增加了**[coinbase][Coinbase] transaction**的交易。而“coinbase transaction”是一种特殊类型的交易，它不需要任何output。它会无中生有output（比如：“币”）。从而蛋不是鸡生的。这是给矿工挖出新区块的奖励。
 
 前面的章节里提到的**创世区块**就是整个区块链的起始点。就是这个创世区块在区块链中生成了第一个output。因为没有更早的交易，所以没有更早的output。
 
