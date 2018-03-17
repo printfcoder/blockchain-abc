@@ -24,7 +24,7 @@
 
 数学和密码学里，有一个概念叫数字加密。该算法保证：
 
-1. 数据在从发送者传输到接收者过程中不会被更改
+1. 数据在从发送者传输到接收者过程中不会被更改
 2. 数据由确定的发送者创建
 3. 发送者不能否认发送过这笔数据
 
@@ -351,14 +351,14 @@ for inID, vin := range txCopy.Vin {
 	txCopy.Vin[inID].Signature = nil
 	txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
 ```
-遍历中，**Signature**会设置成空（只是复核，确定为空），**PubKey**设成引用的output的**PubKeyHash**值。此时，所有的交易除了当前的都是“空的”，也即是**Signature**和**PubKey**被设置成了空值。因此，input是被**分开（separately）**签名的，尽管在我们的应用里是不必要的，但是比特币允许交易中的input引用不同的地址。
+遍历中，**Signature**会设置成空（只是复核，确定为空），**PubKey**设成引用的output的**PubKeyHash**值。此时，所有的交易除了当前的都是“空的”，也即是**Signature**和**PubKey**被设置成了空值。因此，input是被**分开（separately）**签名的，尽管在我们的应用里是不必要的，但是比特币允许交易中的input引用不同的地址。
 
 ```golang
 	txCopy.ID = txCopy.Hash()
 	txCopy.Vin[inID].PubKey = nil
 ```
 
-**Hash**方法把交易序列化再用SHA-256算法算出交易的hash值。得到的结果就是用来签名的数据。算出这个hash值后，还需要把**PubKey**字段重置，所以它不会影响后面的迭代。 
+**Hash**方法把交易序列化再用SHA-256算法算出交易的hash值。得到的结果就是用来签名的数据。算出这个hash值后，还需要把**PubKey**字段重置，所以它不会影响后面的迭代。
 
 核心代码：
 
@@ -406,7 +406,7 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
 	return true
 }
 ```
-这个方法比较简单，首先我们拷贝一份交易的副本：
+这个方法比较简单，首先我们拷贝一份交易的副本：
 
 ```golang
  	txCopy := tx.TrimmedCopy()
@@ -557,9 +557,9 @@ $ blockchain_go getbalance -address 1NE86r4Esjf53EL7fR86CsfTZpNN42Sfab
 Balance of '1NE86r4Esjf53EL7fR86CsfTZpNN42Sfab': 6
 ```
 
-本篇也快搞完了
+本篇也快搞完了
 
-把**NewUTXOTransaction**中调用的**bc.SignTransaction(&tx, wallet.PrivateKey)**给注释掉，确定未签名的交易不能被挖出来。
+把**NewUTXOTransaction**中调用的**bc.SignTransaction(&tx, wallet.PrivateKey)**给注释掉，确定未签名的交易不能被挖出来。
 
 ```golang
 func NewUTXOTransaction(from, to string, amount int, bc *Blockchain) *Transaction {
@@ -580,7 +580,7 @@ $ blockchain_go send -from 1AmVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -to 1NE86r4Esjf53E
 
 # 总结
 
-我们从前面几章开始讲了这么久来实现比特币中的各种关键特性。我们实现了大多数，除了网络连通，下一章，我们把交易弄完。
+我们从前面几章开始讲了这么久来实现比特币中的各种关键特性。我们实现了大多数，除了网络连通，下一章，我们把交易弄完。
 
 # 相关链接
 
