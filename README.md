@@ -11,7 +11,7 @@
 
 [原文][原文]（略有删改）
 
-> 本节的阐述会有重大的代码改变，如果在这里讲就有点麻烦了。请跳到[这里](https://github.com/printfcoder/blockchain-abc//compare/part_5...part_6#files_bucket)来看所有的改变。
+> 本节的阐述会有重大的代码改变，如果在这里讲就有点麻烦了。请跳到[这里](https://github.com/printfcoder/blockchain-abc//compare/part_5...part_6#files_bucket)来看所有的改变。
 
 ## Reward（奖励）
 
@@ -85,7 +85,7 @@ func (bc *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
 1. Blockchain.FindUnspentTransactions 找到所有含有未消费output的交易主函数。遍历所有的区块在该函数里执行。
 2. Blockchain.FindSpendableOutputs 当有新的交易创建时使用。如果找足够交易所需数的output。会调用**Blockchain.FindUnspentTransactions**方法
 3. Blockchain.FindUTXO 找到未消费的output来创建公钥hash，调用 **Blockchain.FindUnspentTransactions**方法。
-4. Blockchain.FindTransaction 通过交易的ID在区块链中找到交易。它会遍历所有区块直到找到该交易。
+4. Blockchain.FindTransaction 通过交易的ID在区块链中找到交易。它会遍历所有区块直到找到该交易。
 
 可以看到，这些方法遍历了整个数据库中的所有区块。但是现在我们不能改善这些方法，因为UTXO集合没有存放在所有的交易，而只有那些含未消费output的。因此，还不能在**Blockchain.FindTransaction**使用。
 
@@ -191,7 +191,7 @@ func (u UTXOSet) FindUTXO(pubKeyHash []byte) []TXOutput {
 
 这些方法和**Blockchain**相应版本的方法相比，有些轻微的改动。而那些**Blockchain**中对应的方法就没有用了。
 
-用了UTXO集合我们（交易的）数据就可以分开存放了：实际的交易存放在区块链中，未消费的output则存放在UTXO集合里。这样的分离需要坚固的同步机制，因为我们得让UTXO集合总是能更新和保存所有最近交易的output。但是我们不需要每次新区块挖出来时重排索引，因为我们要避免频繁的区块链查找。因此，需要一个机制来更新UTXO集合。
+用了UTXO集合我们（交易的）数据就可以分开存放了：实际的交易存放在区块链中，未消费的output则存放在UTXO集合里。这样的分离需要坚固的同步机制，因为我们得让UTXO集合总是能更新和保存所有最近交易的output。但是我们不需要每次新区块挖出来时重排索引，因为我们要避免频繁的区块链查找。因此，需要一个机制来更新UTXO集合。
 
 ```golang
 func (u UTXOSet) Update(block *Block) {
