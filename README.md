@@ -307,7 +307,7 @@ Balance of '13UASQpCR8Nr41PojH8Bz4K6cmTCqweskL': 4
 
 看看默克尔树：
 
-![](/myblog/assets/images/blockchain/abc/merkle-tree-diagram.png)
+![](https://printfcoder.github.io/myblog/assets/images/blockchain/abc/merkle-tree-diagram.png)
 
 默克尔树为了每一个区块而创建，开始于叶（树的底部）节点，叶子就是一个交易的hash值（比特币使用两次SHA256计算）。叶子的数量必须是偶数的，但是并不是每一个区块都含有偶数个交易。如果有奇数个交易，最后一个交易就会重复（**在默克尔树里是这样，不是区块中！**）。
 
