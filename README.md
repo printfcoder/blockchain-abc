@@ -472,12 +472,12 @@ func (b *Block) HashTransactions() []byte {
 5. [Golang 区块链入门 第五章 地址][本序列第五篇]
 6. [Golang 区块链入门 第六章 交易 第二节][本序列第六篇]
 
-[本序列第一篇]: /myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
-[本序列第二篇]: /myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
-[本序列第三篇]: /myblog/blockchain/abc/2018/03/07/abc-building-blockchain-in-go-part-3-persistence-and-cli/
-[本序列第四篇]: /myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
-[本序列第五篇]: /myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
-[本序列第六篇]: /myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
+[本序列第一篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
+[本序列第二篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
+[本序列第三篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/07/abc-building-blockchain-in-go-part-3-persistence-and-cli/
+[本序列第四篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
+[本序列第五篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
+[本序列第六篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
 
 [原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-6/
 [本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_6
