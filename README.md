@@ -1,469 +1,608 @@
-# Golang 区块链入门 第六章 交易2
+# Golang 区块链入门 第7章 网络
 
-在本系列最早的一篇文章里我说过区块链就是一个分布式数据库。后来，我们决定跳开“分布式”的部分而把注意力放到”数据库“上。直到现在，我们实现了区块链数据库的大部分工作。在这篇文章中，我们将会把之间跳过的一些特性覆盖掉，下面的部分我们将会开始用区块链的分布式自然特性。
+到目前为止，前面我们构造了拥有全部关键功能的区块链，匿名、安全、随机的地址；区块链数据存储；工作量证明系统；可靠的交易存储。这些特性都很重要，但还不够。能够让这些能力发出耀眼光芒的，让加密货币成为可能，是网络。这样实现的区块链，只能运行在一台计算机上的能有什么卵用？那些基于密码学的特性有什么用，什么时候又只会有一个人使用？是网络让所有的机制运行起来且变得有用。
 
-前面的章节:
-1. [Golang 区块链入门 第一章 基本概念][本序列第一篇]
-2. [Golang 区块链入门 第二章 工作量证明][本序列第二篇]
-3. [Golang 区块链入门 第三章 持久化和命令行接口][本序列第三篇]
-4. [Golang 区块链入门 第四章 交易 第一节][本序列第四篇]
-5. [Golang 区块链入门 第五章 地址][本序列第五篇]
+可以把区块链中的我当成规则，类似于人们在彼此的生活成长中而建立的规则。一种社会秩序。区块链网络是一个遵从相同的规则的程序生态社区，也是因为遵从这些规则而赋予区块链网络生命。类似地，当人们分享相同的想法时，就会变得更强也会一起创建更好的生活。有的人遵从不同的规则时，这些人就会被社会隔离（国家、公社，等等）。同样，如果区块链节点都使用遵守不同的规则，那么它们只会在一个隔离的网络中生长。
+
+**这点非常重要**：不骨网络没有大量的节点共享相同的规则，这些规则一点用也没有。
+
+> 免责声明：非常不幸，我没有足够的时间来实现真正的P2P网络。这篇文章我会阐明最常用的场景，涉及不同类型的节点。改善这一场景并使之成为P2P网络对你来说是一个非常不错的挑战和尝试。并且，我不保证其它非本章的实现方式可以运行。抱歉！
+> 
+> 本篇文章的代码改动比较大，就不详细解释了。可以到[这里](https://github.com/printfcoder/blockchain-abc//compare/part_6...part_7)来看所有的改变。看他们的区别。
+
+## 区块链网络
+区块链网络是去中心化的，也就是说是没有一个中央服务器作为伺服，也没有客户端向服务器获取或传送数据。在区块链网络中有节点，每一个节点都是该网络中完整的成员。一个节点就是一切，即是服务器也是客户端。记住这点很重要，和Web应用是不同的。
+
+区块链网络是P2P（Peer-to-Peer）网络，也就是说节点之间是彼此直接相连的。这个拓扑非常庞大，因为节点角色之间没有层级的之分。下图是P2P网络的图解：
+![](https://printfcoder.github.io/myblog/assets/images/blockchain/abc/p2p-network.png)
+
+[使用Freepik画的](https://www.freepik.com/dooder)
+
+节点在这样的网络是非常难实现的，因为他们必须执行很多操作。每个节点都肯定会和其它很多节点交互，也会请求其它节点的状态，与自己的状态比较，如果自己的状态过期时就要更新状态。
+
+## 节点规则
+尽管是成熟的，区块链节点在网络中可以充当不同的角色：
+
+### 1. 矿工
+有些节点运行强大或特制的硬件（比如ASIC），它们的目的就是尽可能快地挖出新的区块。矿机可能是仅有的在区块链里使用工作量证明的（程序），因为挖矿意味着要解释PoW问题。而举个例子，在权益证明（Proof-of-Stake）区块链中是没有挖矿的。
+
+### 2. 全功能节点
+这些节点验证矿工挖出来的区块和核实交易。为了完成这点，它们必须握有整个区块链的副本。并且，这些节点执行路由操作，就像帮助其它节点互相发现。
+
+网络中拥有全功能节点非常重要，这些节点可以执行决策：它们能裁定是否区块或者交易是合法的。
+
+### 3. SPV
+
+SPV代表Simplified Payment Verification，简化交易验证。这些节点并不会去保存区块链的完整副本，但是却能够核实交易（并不是全部，而是子集，比如，那些会发送到特殊地址的交易）。SPV节点依赖全功能节点提供数据，也可以有多个SPV节点连接到一个全功能节点。SPV使得钱包应用成为可能：钱包不需要下载整个区块链，但是能够核实交易。
+
+## 网络简化
+
+为了在我们的区块链中实现网络，我们必须得简化一点东西。问题在于我们没有太多的电脑来模拟有多个节点的网络。我们过去是可以使用虚拟机或者Docker来解决这个问题的，但是这会让每件事都变得复杂，我们得解决虚拟机或者Docker的问题，而我们的目标仅是集中精力到区块链的实现上。所以，我们需要运行多个区块链节点在一台机器上，以此同时，我们还要让它们有不同的地址。为了实现这点，我们使用**端口**作为节点的标识，而不是IP地址，等等。下面将会有节点拥有这些地址，**127.0.0.1:3000**，**127.0.0.1:3001**，**127.0.0.1:3002**等等。我们会调用端口的节点id，然后用**NODE_ID**环境变量设置它们。因此，你可以打开多个终端窗口，设置不同的**NODE_ID**，就可以运行不同的节点了。
+
+这波操作同样需要不同的区块链和钱包文件。它们现在必须依赖节点id，并被命名像：**blockchain_3000.db**, **blockchain_30001.db**和**wallet_3000.db**, **wallet_30001.db**等等
+
+## 实现
+那么，当下载时发生了什么，是指下载Bitcoin Core然后第一次运行？答案是必须连接到一些节点下载区块链最后的状态。考虑到你们计算机并不知道全部或者部分的比特币节点，到底这个节点是什么呢。
+
+在Bitcoin Core里使用硬编码地址可能会出错，节点会被攻击或者关掉，会导致新的节点不能加入到网络中。相反，在Bitcoin Core中，有使用[DNS seeds](https://bitcoin.org/en/glossary/dns-seed)硬编码。它们不是节点，而是存放了一些节点地址的DNS服务器。当你开始运行一个纯净的Bitcoin Core时，它会连接到一个seed然后获取上面记录的所有节点列表，根据这个列表下载区块链。
+
+不过，在我们的实现中，还是会中心化。会用到三个节点：
+
+1. 中心节点：这个节点会被其它节点连接。该节点会在其它节点之间发送数据。
+2. 矿工节点：这个节点会存储新的交易到缓存池中，当有足够的交易时，它就会挖出新的区块。
+3. 钱包节点：这个节点会用来在钱包之间发送钱币。但是和SPV节点不同，它会存储区块链的完整副本。
+
+### 场景
+本篇的目标是实现下面的场景：
+1. 中心节点生成新的区块链
+2. 钱包节点连接到中心节点然后下载区块链
+3. 矿工节点连接到中心节点然后下载区块链
+4. 钱包节点创建交易
+5. 矿工节点接收交易并把它缓存在缓存池中
+6. 当缓存池中有足够的交易时，矿工开始挖新的区块
+7. 当新的区块被挖出来时，会被发送到中心节点。
+8. 钱包节点与中心节点同步
+9. 钱包使用者检测他们支付是否成功
+
+这个场景看起来和比特币很像。尽管我们没有构建一个真正的P2P网络，我们准备实现一个真实的，比特币的主要、最重要的使用案例。
 
 [原文][原文]（略有删改）
 
-> 本节的阐述会有重大的代码改变，如果在这里讲就有点麻烦了。请跳到[这里](https://github.com/printfcoder/blockchain-abc//compare/part_5...part_6#files_bucket)来看所有的改变。
+> 本节的阐述会有重大的代码改变，如果在这里讲就有点麻烦了。请跳到[这里](https://github.com/printfcoder/blockchain-abc//compare/part_5...part_6#files_bucket)来看所有的改变。
 
-## Reward（奖励）
-
-有一件前面的章节中跳过了一个小细节，挖矿奖励。现在我们准备实现这个。
-
-这个奖励也就是coinbase交易。当一个节点开始挖新的区块时，它会把队列中的交易并准备好coinbase交易放到区块中。这笔coinbase交易也仅仅是一个包含了矿工的公钥hash的output。
-
-实现奖励很简单，只用更新一下**send**命令：
-
+### 版本
+节点通过消息的含义进行沟通。当新的节点运行时，它会从DNS种子获取节点的信息，然后向它们发送**版本**信息，在我们的实现中，版本的结构如下：
 ```golang
-func (cli *CLI) send(from, to string, amount int) {
-    ...
-    bc := NewBlockchain()
-    UTXOSet := UTXOSet{bc}
-    defer bc.db.Close()
-
-    tx := NewUTXOTransaction(from, to, amount, &UTXOSet)
-    cbTx := NewCoinbaseTX(from, "")
-    txs := []*Transaction{cbTx, tx}
-
-    newBlock := bc.MineBlock(txs)
-    fmt.Println("Success!")
+type version struct {
+    Version    int
+    BestHeight int
+    AddrFrom   string
 }
 ```
-在我们的实现中，创建交易的人挖出了新的区块，得到奖励。
+我们只有一个区块链版本号，所有**Version**字段不能含有任何重要的信息。**BestHeight**存放节点的区块链长度。**AddFrom**保存发送者的地址。
 
-## UTXO Set
+节点接收**版本**消息做什么呢？它会回复它自己的**版本**信息。这是握手的一种类型，除了先去彼此打招呼别无其它的交互可能。但是这并不仅仅是有礼貌，**版本**用于找到更长的区块链。当一个节点接收到**版本**信息时，它会检测是否节点的区块链比**BestHeight**值要大。如果不是，节点就会请求下载缺失的区块。
 
-在第三章[持久化和命令行接口][本序列第三篇]中，我们学习了比特币中存储区块到数据库的方式。文中提到区块被存放在**blocks** 数据库，交易output存放在**chainstate**数据库中。这里说一下**chainstate**的结构：
+为了能接收到消息，我们要有一个服务器：
 
-> 1. 'c' + 32-byte transaction hash -> unspent transaction output record for that transaction
-> 2. 'B' -> 32-byte block hash: the block hash up to which the database represents the unspent transaction outputs
-
-翻译一下
-
-> 1. 'c' + 32-byte 交易的hash值 -> 未完成的交易记录
-> 2. 'B' -> 32-byte 块hash值: 数据库记录的未使用的交易的output的块hash
- 
-第三篇文章里我们已经实现了交易，但是没有使用**chainstate**来保存他们的output，现在来实现这个。
-
-**chainstate**不存放交易，相反，它保存UTXO（unspent transaction outputs，有结余交易的output）集合。除此之外，它保存“数据库记录的未使用的交易的output的块hash”，我们会忽略这个特性，因为我们没有使用区块的高度（下一篇里会讨论实现）。
-
-那为什么我要有**UTXO**集合？
-
-考虑到我们此前实现的方法**Blockchain.FindUnspentTransactions**：
 ```golang
-func (bc *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
-    ...
-    bci := bc.Iterator()
+var nodeAddress string
+var knownNodes = []string{"localhost:3000"}
+
+func StartServer(nodeID, minerAddress string) {
+    nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
+    miningAddress = minerAddress
+    ln, err := net.Listen(protocol, nodeAddress)
+    defer ln.Close()
+
+    bc := NewBlockchain(nodeID)
+
+    if nodeAddress != knownNodes[0] {
+        sendVersion(knownNodes[0], bc)
+    }
 
     for {
-        block := bci.Next()
+        conn, err := ln.Accept()
+        go handleConnection(conn, bc)
+    }
+}
+```
+首先，在中央服务器的地址上使用硬编码，因为每一个新的节点都必须要知道从哪里获得初始化数据。**minerAddress**参数指定接收挖出新区块的奖励地址。
 
-        for _, tx := range block.Transactions {
-            ...
-        }
+```golang
+if nodeAddress != knownNodes[0] {
+    sendVersion(knownNodes[0], bc)
+}
+```
+就是说当前节点不是中央节点时，它就会发送**version**消息到中央节点判断是否自已的区块链是否过期了。
+```golang
+func sendVersion(addr string, bc *Blockchain) {
+    bestHeight := bc.GetBestHeight()
+    payload := gobEncode(version{nodeVersion, bestHeight, nodeAddress})
 
-        if len(block.PrevBlockHash) == 0 {
-            break
+    request := append(commandToBytes("version"), payload...)
+
+    sendData(addr, request)
+}
+```
+消息是底层的比特序列。前12字节指定了命令名（在这里的情况就是“version”），后面的字节会包含**gob**编码过的消息结构。**commandToBytes**：
+
+```golang
+func commandToBytes(command string) []byte {
+    var bytes [commandLength]byte
+
+    for i, c := range command {
+        bytes[i] = byte(c)
+    }
+
+    return bytes[:]
+}
+```
+它创建了12字节的缓存区，使用命令名来填充，把余留的字节置空。上面是它的反向函数：
+```golang
+func bytesToCommand(bytes []byte) string {
+    var command []byte
+
+    for _, b := range bytes {
+        if b != 0x0 {
+            command = append(command, b)
         }
     }
+
+    return fmt.Sprintf("%s", command)
+}
+```
+
+当节点接收到命令时，它会运行**bytesToCommand**指令把命令名展开，然后使用正确的处理函数执行命令：
+```golang
+func handleConnection(conn net.Conn, bc *Blockchain) {
+    request, err := ioutil.ReadAll(conn)
+    command := bytesToCommand(request[:commandLength])
+    fmt.Printf("Received %s command\n", command)
+
+    switch command {
     ...
+    case "version":
+        handleVersion(request, bc)
+    default:
+        fmt.Println("Unknown command!")
+    }
+
+    conn.Close()
 }
 ```
-该函数负责把有未消费完output的交易找出来。因为交易是存放在区块中的，所以这个方法会迭代所有的区块链中的区块，并检测区块中的每一个交易。到2017年9月18号，比特币中已经有485860个区块，而全部的数据用了140+GB的磁盘空间。这意为着如果要验证交易，则要检测所有的节点。而且，验证交易将需要遍历很多区块。
-
-而解决方案是要给未消费完的output建立索引，这就是UTXO的作用：这个缓存是基于所有区块链中交易（通过遍历了所有的区块，当然了，只执行了一次）创建的，然后就用来计算余额和验证新的交易。这个UTXO的大小在2017年9月大概是有2.5Gb。
-
-好了，我们要想一下要如何改造UTXO的实现方法。当前，下面这些方法是用于查找交易的：
-
-1. Blockchain.FindUnspentTransactions 找到所有含有未消费output的交易主函数。遍历所有的区块在该函数里执行。
-2. Blockchain.FindSpendableOutputs 当有新的交易创建时使用。如果找足够交易所需数的output。会调用**Blockchain.FindUnspentTransactions**方法
-3. Blockchain.FindUTXO 找到未消费的output来创建公钥hash，调用 **Blockchain.FindUnspentTransactions**方法。
-4. Blockchain.FindTransaction 通过交易的ID在区块链中找到交易。它会遍历所有区块直到找到该交易。
-
-可以看到，这些方法遍历了整个数据库中的所有区块。但是现在我们不能改善这些方法，因为UTXO集合没有存放在所有的交易，而只有那些含未消费output的。因此，还不能在**Blockchain.FindTransaction**使用。
-
-所以我们需要下面的这些方法：
-
-1. Blockchain.FindUTXO 通过遍历所有区块找到所有未消费的output
-2. UTXOSet.Reindex 调用**FindUTXO**来查找所有没有消费的output，然后存储到数据库中。这里是缓存执行的地方。
-3. UTXOSet.FindSpendableOutputs 类似**Blockchain.FindSpendableOutputs**，但是使用的是UTXO集合。
-4. UTXOSet.FindUTXO 类似**Blockchain.FindUTXO**，但是使用的是UTXO集合。
-5. Blockchain.FindTransaction 保持不变
-
-因此，用得最多的两个方法从现在开始就会使用缓存，开始码代码：
-
+**version**处理函数如下：
 ```golang
-type UTXOSet struct {
-    Blockchain *Blockchain
+func handleVersion(request []byte, bc *Blockchain) {
+    var buff bytes.Buffer
+    var payload verzion
+
+    buff.Write(request[commandLength:])
+    dec := gob.NewDecoder(&buff)
+    err := dec.Decode(&payload)
+
+    myBestHeight := bc.GetBestHeight()
+    foreignerBestHeight := payload.BestHeight
+
+    if myBestHeight < foreignerBestHeight {
+        sendGetBlocks(payload.AddrFrom)
+    } else if myBestHeight > foreignerBestHeight {
+        sendVersion(payload.AddrFrom, bc)
+    }
+
+    if !nodeIsKnown(payload.AddrFrom) {
+        knownNodes = append(knownNodes, payload.AddrFrom)
+    }
 }
 ```
-我们使用同一个数据库，但是把UTXO集合放到另一个桶（bucket）中。所以，**UTXOSet**和**Blockchain**是耦合的（共用了一个数据库）：
+首先要解码请求，展开内部信息。所有的处理函数都是相似的，后面会把篇幅省下来。
+
+然后节点会用它的**BestHeight**与消息中的比较。如果节点区块更长时，那么它会回复**version**消息，相反，它会发送**getBlocks（获取区块）**消息。
+
+### getblocks
 
 ```golang
-func (u UTXOSet) Reindex() {
-    db := u.Blockchain.db
-    bucketName := []byte(utxoBucket)
+type getblocks struct {
+    AddrFrom string
+}
+```
 
-    err := db.Update(func(tx *bolt.Tx) error {
-        err := tx.DeleteBucket(bucketName)
-        _, err = tx.CreateBucket(bucketName)
-    })
+**getblocks**的意思是**亮出你有的区块**（在比特币中，会更复杂）。注意，不是**扔你所有的区块过来**，相反它是请求区块hash的列表。这么做是为了降低网络负载，因为区块可以从不同的节点下载，我们也不用到一个节点去下载上千兆的数据。
 
-    UTXO := u.Blockchain.FindUTXO()
+处理这个命令比较简单：
+```golang
+func handleGetBlocks(request []byte, bc *Blockchain) {
+    ...
+    blocks := bc.GetBlockHashes()
+    sendInv(payload.AddrFrom, "block", blocks)
+}
+```
+我们的实现中，它会返回所有区块的hash
 
-    err = db.Update(func(tx *bolt.Tx) error {
-        b := tx.Bucket(bucketName)
+### inv
 
-        for txID, outs := range UTXO {
-            key, err := hex.DecodeString(txID)
-            err = b.Put(key, outs.Serialize())
+```golang
+type inv struct {
+    AddrFrom string
+    Type     string
+    Items    [][]byte
+}
+```
+比特币中使用**inv**来向其它节点展示当前节点有哪些区块或者交易。再说一遍，它并不包含所有的区块和交易，只保存有它们的hash值。**Type**字段用来声明这里存的是区块还是交易。
+
+处理**inv**就比较复杂些了：
+```golang
+func handleInv(request []byte, bc *Blockchain) {
+    ...
+    fmt.Printf("Recevied inventory with %d %s\n", len(payload.Items), payload.Type)
+
+    if payload.Type == "block" {
+        blocksInTransit = payload.Items
+
+        blockHash := payload.Items[0]
+        sendGetData(payload.AddrFrom, "block", blockHash)
+
+        newInTransit := [][]byte{}
+        for _, b := range blocksInTransit {
+            if bytes.Compare(b, blockHash) != 0 {
+                newInTransit = append(newInTransit, b)
+            }
         }
-    })
+        blocksInTransit = newInTransit
+    }
+
+    if payload.Type == "tx" {
+        txID := payload.Items[0]
+
+        if mempool[hex.EncodeToString(txID)].ID == nil {
+            sendGetData(payload.AddrFrom, "tx", txID)
+        }
+    }
 }
 ```
-这个方法创建并初始化UTXO集合。首先移除所有的存在的桶，然后从区块链中找到所有未消费的output，最后把这些output存到桶中去。
+当区块的hash转移好后，需要把它们保存到**blocksInTransit**变量中来跟踪下载过的区块。这允许我们可以从不同的节点下载区块。在区块进入传输状态后，发送**getData**指令给**inv**的发送者然后更新**blocksInTransit**。在真正的P2P网络中，得在不同的区块之间传办理区块。
 
-**Blockchain.FindUTXO**几乎与**Blockchain.FindUnspentTransactions**是相同的，但是它返回的是**TransactionID → TransactionOutputs**映射组合的map。
+在实现中，还永不会发送**inv**时带上多个hash。这也是为什么当**payload.Type == "tx"**时，只用到数组中获取第一个hash。然后检测是否刚刚的txID是否存在，如果不存在，那么发送**getdata**指令获取这个交易。
 
-现在，UTXO集合可以发送币了：
+### getdata
+```golang
+type getdata struct {
+    AddrFrom string
+    Type     string
+    ID       []byte
+}
+```
+
+**getdata**用于请求一个指定的区块或交易，它只能带有一个区块或交易的id。
 
 ```golang
-func (u UTXOSet) FindSpendableOutputs(pubkeyHash []byte, amount int) (int, map[string][]int) {
-    unspentOutputs := make(map[string][]int)
-    accumulated := 0
-    db := u.Blockchain.db
+func handleGetData(request []byte, bc *Blockchain) {
+    ...
+    if payload.Type == "block" {
+        block, err := bc.GetBlock([]byte(payload.ID))
 
-    err := db.View(func(tx *bolt.Tx) error {
-        b := tx.Bucket([]byte(utxoBucket))
-        c := b.Cursor()
+        sendBlock(payload.AddrFrom, &block)
+    }
 
-        for k, v := c.First(); k != nil; k, v = c.Next() {
-            txID := hex.EncodeToString(k)
-            outs := DeserializeOutputs(v)
+    if payload.Type == "tx" {
+        txID := hex.EncodeToString(payload.ID)
+        tx := mempool[txID]
 
-            for outIdx, out := range outs.Outputs {
-                if out.IsLockedWithKey(pubkeyHash) && accumulated < amount {
-                    accumulated += out.Value
-                    unspentOutputs[txID] = append(unspentOutputs[txID], outIdx)
+        sendTx(payload.AddrFrom, &tx)
+    }
+}
+```
+
+这个**getdata**处理函数比较简单。当请求的是区块，则返回区块；如果是交易，则返回交易。注意，这里有个缺陷，就是没有去检测是否存在指定的区块或者交易。
+
+### 区块和交易
+```golang
+type block struct {
+    AddrFrom string
+    Block    []byte
+}
+
+type tx struct {
+    AddFrom     string
+    Transaction []byte
+}
+```
+就是这些消息完成真正的数据传送
+
+**block**的处理器很简单：
+```golang
+func handleBlock(request []byte, bc *Blockchain) {
+    ...
+
+    blockData := payload.Block
+    block := DeserializeBlock(blockData)
+
+    fmt.Println("Recevied a new block!")
+    bc.AddBlock(block)
+
+    fmt.Printf("Added block %x\n", block.Hash)
+
+    if len(blocksInTransit) > 0 {
+        blockHash := blocksInTransit[0]
+        sendGetData(payload.AddrFrom, "block", blockHash)
+
+        blocksInTransit = blocksInTransit[1:]
+    } else {
+        UTXOSet := UTXOSet{bc}
+        UTXOSet.Reindex()
+    }
+}
+```
+当我们接收到新的区块时，我们把它放到我们的区块链中。如果有很多区块需要下载，我们从前一个相同的下载过区块的节点下载它们。当完成全部的区块下载时，UTXO就需要更新了。
+
+> 备注：并不是要无条件相信，我们应该在把每一个传来的区块加入区块链之前得验证它们。
+>
+> 备注：并不需要运行**UTXOSet.Reindex()**方法，应该用**UTXOSet.Update(block)**，因为区块链太大了，重置索引会花费太多时间。
+
+处理**tx**消息的函数稍微复杂些：
+
+```golang
+func handleTx(request []byte, bc *Blockchain) {
+    ...
+    txData := payload.Transaction
+    tx := DeserializeTransaction(txData)
+    mempool[hex.EncodeToString(tx.ID)] = tx
+
+    if nodeAddress == knownNodes[0] {
+        for _, node := range knownNodes {
+            if node != nodeAddress && node != payload.AddFrom {
+                sendInv(node, "tx", [][]byte{tx.ID})
+            }
+        }
+    } else {
+        if len(mempool) >= 2 && len(miningAddress) > 0 {
+        MineTransactions:
+            var txs []*Transaction
+
+            for id := range mempool {
+                tx := mempool[id]
+                if bc.VerifyTransaction(&tx) {
+                    txs = append(txs, &tx)
                 }
             }
-        }
-    })
 
-    return accumulated, unspentOutputs
-}
-```
-
-然后检测余额：
-
-```golang
-func (u UTXOSet) FindUTXO(pubKeyHash []byte) []TXOutput {
-    var UTXOs []TXOutput
-    db := u.Blockchain.db
-
-    err := db.View(func(tx *bolt.Tx) error {
-        b := tx.Bucket([]byte(utxoBucket))
-        c := b.Cursor()
-
-        for k, v := c.First(); k != nil; k, v = c.Next() {
-            outs := DeserializeOutputs(v)
-
-            for _, out := range outs.Outputs {
-                if out.IsLockedWithKey(pubKeyHash) {
-                    UTXOs = append(UTXOs, out)
-                }
+            if len(txs) == 0 {
+                fmt.Println("All transactions are invalid! Waiting for new ones...")
+                return
             }
-        }
 
-        return nil
-    })
+            cbTx := NewCoinbaseTX(miningAddress, "")
+            txs = append(txs, cbTx)
 
-    return UTXOs
-}
-```
+            newBlock := bc.MineBlock(txs)
+            UTXOSet := UTXOSet{bc}
+            UTXOSet.Reindex()
 
-这些方法和**Blockchain**相应版本的方法相比，有些轻微的改动。而那些**Blockchain**中对应的方法就没有用了。
+            fmt.Println("New block is mined!")
 
-用了UTXO集合我们（交易的）数据就可以分开存放了：实际的交易存放在区块链中，未消费的output则存放在UTXO集合里。这样的分离需要坚固的同步机制，因为我们得让UTXO集合总是能更新和保存所有最近交易的output。但是我们不需要每次新区块挖出来时重排索引，因为我们要避免频繁的区块链查找。因此，需要一个机制来更新UTXO集合。
+            for _, tx := range txs {
+                txID := hex.EncodeToString(tx.ID)
+                delete(mempool, txID)
+            }
 
-```golang
-func (u UTXOSet) Update(block *Block) {
-    db := u.Blockchain.db
-
-    err := db.Update(func(tx *bolt.Tx) error {
-        b := tx.Bucket([]byte(utxoBucket))
-
-        for _, tx := range block.Transactions {
-            if tx.IsCoinbase() == false {
-                for _, vin := range tx.Vin {
-                    updatedOuts := TXOutputs{}
-                    outsBytes := b.Get(vin.Txid)
-                    outs := DeserializeOutputs(outsBytes)
-
-                    for outIdx, out := range outs.Outputs {
-                        if outIdx != vin.Vout {
-                            updatedOuts.Outputs = append(updatedOuts.Outputs, out)
-                        }
-                    }
-
-                    if len(updatedOuts.Outputs) == 0 {
-                        err := b.Delete(vin.Txid)
-                    } else {
-                        err := b.Put(vin.Txid, updatedOuts.Serialize())
-                    }
-
+            for _, node := range knownNodes {
+                if node != nodeAddress {
+                    sendInv(node, "block", [][]byte{newBlock.Hash})
                 }
             }
 
-            newOutputs := TXOutputs{}
-            for _, out := range tx.Vout {
-                newOutputs.Outputs = append(newOutputs.Outputs, out)
+            if len(mempool) > 0 {
+                goto MineTransactions
             }
-
-            err := b.Put(tx.ID, newOutputs.Serialize())
         }
-    })
+    }
 }
 ```
-这个方法看上去有点大，但是它做的事还是比较简单粗暴的。当挖出新的区块时，UTXO集合就会被更新。更新意味着会清除掉被消费了的output，及增加新挖出的交易中未消费的output。如果一笔交易的output被移除了，内部也没有其它output时，它也会除掉。相当简单。
 
-在必要的地方使用UTXO：
+第一件要做的事就是把新的交易放到缓存池中（再强调一次，交易在被放到缓存池前一定要核实），下一块代码：
+```golang
+if nodeAddress == knownNodes[0] {
+    for _, node := range knownNodes {
+        if node != nodeAddress && node != payload.AddFrom {
+            sendInv(node, "tx", [][]byte{tx.ID})
+        }
+    }
+}
+```
+检测是否当前的节点是中央节点，在我们的实现当中，中央节点并不会挖矿，相反，它只是把新的交易传送给网络中的其它节点。
+
+接下来这块代码只是给矿机节点用的，把它分成两小片：
+```golang
+if len(mempool) >= 2 && len(miningAddress) > 0 {
+```
+**miningAddress**只有矿机节点才会被设置。当前的节点中有2个或多个交易在缓存池中时，挖矿就开始。
+```golang
+for id := range mempool {
+    tx := mempool[id]
+    if bc.VerifyTransaction(&tx) {
+        txs = append(txs, &tx)
+    }
+}
+
+if len(txs) == 0 {
+    fmt.Println("All transactions are invalid! Waiting for new ones...")
+    return
+}
+```
+
+首先，缓存池中所有的交易都是核实过的。不合法的交易会被忽略掉，如果没有合法的交易，挖坑就会中断。
 
 ```golang
-func (cli *CLI) createBlockchain(address string) {
-    ...
-    bc := CreateBlockchain(address)
-    defer bc.db.Close()
+cbTx := NewCoinbaseTX(miningAddress, "")
+txs = append(txs, cbTx)
 
-    UTXOSet := UTXOSet{bc}
-    UTXOSet.Reindex()
-    ...
-}
+newBlock := bc.MineBlock(txs)
+UTXOSet := UTXOSet{bc}
+UTXOSet.Reindex()
+
+fmt.Println("New block is mined!")
 ```
+核实过的交易正被放到区块中，还有带有奖励的coinbase交易。当挖出区块后，UTXO集合就会被重置索引。
 
-重置索引在新的区块链创建后发生才正确。现在，只有在这里**Reindex**才用到，不过由于在一开始区块链只有一个区块一笔交易，导致看上去有点用力过度，而且**Update**也不会作为代替使用。但是我们还是后面我们还是会用到重置索引机制的。
+>备忘：再一次说明，要用UTXOSet.Update而不是UTXOSet.Reindex
 
 ```golang
-func (cli *CLI) send(from, to string, amount int) {
-    ...
-    newBlock := bc.MineBlock(txs)
-    UTXOSet.Update(newBlock)
+for _, tx := range txs {
+    txID := hex.EncodeToString(tx.ID)
+    delete(mempool, txID)
+}
+
+for _, node := range knownNodes {
+    if node != nodeAddress {
+        sendInv(node, "block", [][]byte{newBlock.Hash})
+    }
+}
+
+if len(mempool) > 0 {
+    goto MineTransactions
 }
 ```
-在新的区块挖出来后，UTXO集合就会被更新。
 
-检测一下是否工作：
+在交易被挖时，它就会从缓存池中移除。其它被当前节点通知到的节点都会收到带有新区块hash的**inv**消息。在收到消息后，它们可以请求该刚被挖出的新区块。
+
+## 成果
+
+现在演示上面定义的场景。
+
+首先，在第一个终端窗口中设置环境变量**NODE_ID**为3000（**export NODE_ID=3000**）。我们在下一段中会使用像**NODE 3000**或者**NODE 3001**这样的标识，以便在大家能知道打印出的活动是哪个节点的。
+
+下面的分段title出是切到指定的窗口或打开新窗口
+
+### 节点 3000
+
+创建新的钱包和新的区块链
+```shell
+$ blockchain_go createblockchain -address CENTREAL_NODE
+```
+（这里使用假的地址，这样可以简单明了些）
+
+然后，这个区块链只包含有创世区块。我们需要去保存这个区块然后在其它节点中使用它。创世区块作为区块链的标识（在比特币中，创世区块是硬编码的）。
 
 ```shell
-$ blockchain_go createblockchain -address 1JnMDSqVoHi4TEFXNw5wJ8skPsPf4LHkQ1
-00000086a725e18ed7e9e06f1051651a4fc46a315a9d298e59e57aeacbe0bf73
-
-Done!
-
-$ blockchain_go send -from 1JnMDSqVoHi4TEFXNw5wJ8skPsPf4LHkQ1 -to 12DkLzLQ4B3gnQt62EPRJGZ38n3zF4Hzt5 -amount 6
-0000001f75cb3a5033aeecbf6a8d378e15b25d026fb0a665c7721a5bb0faa21b
-
-Success!
-
-$ blockchain_go send -from 1JnMDSqVoHi4TEFXNw5wJ8skPsPf4LHkQ1 -to 12ncZhA5mFTTnTmHq1aTPYBri4jAK8TacL -amount 4
-000000cc51e665d53c78af5e65774a72fc7b864140a8224bf4e7709d8e0fa433
-
-Success!
-
-$ blockchain_go getbalance -address 1JnMDSqVoHi4TEFXNw5wJ8skPsPf4LHkQ1
-Balance of '1F4MbuqjcuJGymjcuYQMUVYB37AWKkSLif': 20
-
-$ blockchain_go getbalance -address 12DkLzLQ4B3gnQt62EPRJGZ38n3zF4Hzt5
-Balance of '1XWu6nitBWe6J6v6MXmd5rhdP7dZsExbx': 6
-
-$ blockchain_go getbalance -address 12ncZhA5mFTTnTmHq1aTPYBri4jAK8TacL
-Balance of '13UASQpCR8Nr41PojH8Bz4K6cmTCqweskL': 4
+$ cp blockchain_3000.db blockchain_genesis.db 
 ```
 
-**1JnMDSqVoHi4TEFXNw5wJ8skPsPf4LHkQ1**地址收到三个奖励：
+### 节点 3001
 
-1. 挖出创世区块的奖励
-2. 挖出**0000001f75cb3a5033aeecbf6a8d378e15b25d026fb0a665c7721a5bb0faa21b**区块
-3. 挖出**000000cc51e665d53c78af5e65774a72fc7b864140a8224bf4e7709d8e0fa433**区块
+下一步，打开新的终端窗口，把node ID设置为3001。这个节点是钱包节点。用**blockchain_go createwallet**来生成几个地址，定义这些地址为**WALLET_1**、**WALLET_2**、**WALLET_3**。
 
-## 默克尔树
+### 节点 3000
 
-在这里要再多讨论一个的优化机制。
+发送一些币到钱包地址中
 
-前面说到，完整的区块链数据库（即区块链）花掉了140Gb的磁盘存储空间。因为去中心化的特性，每个在网络中的节点都必须独立且足够自主，也即每个节点都必须保存整个区块链的副本。随着人们开始使用比特币，这一规则就会变得困难，每个人都要运行所有节点显然是不合适的。还有，因为节点都是网络中完全成熟的部分，它们都有责任：必须验证交易和区块。另外，得能连上网络与其它节点交互和下载新的区块。
-
-在中本始发表的最初的比特币[论文](https://bitcoin.org/bitcoin.pdf)中，已经有一个解决方案来处理这一问题，简化支付验证（Simplified Payment Verification，SPV）。SPV是一个轻量的比特币节点，不会下载整个区块连，**也不验证区块和交易**。相反，它会找出区块（用于验证交易）中的交易，且和所有的节点连接来检索必要的数据。这一机制允许运行多个轻量的钱包节点和只需一个全量节点。
-
-为了实现SPV的可行性，得有一种方式能检测在不下载整个区块的情况下，判断该区块包含了指定的交易。为了解决这个问题，需要引入默克尔树。
-
-默克尔树被用于比特币来获取交易hash值，该hash存放在block的头部以及在工作证明中会被用到。直到现在，我们也只是把区块中的每一个交易hash串起来，再用**SHA-256**计算它们。这当然也是获取唯一的区块中的交易描述的好方式，但是并没有默克尔树的优点。
-
-看看默克尔树：
-
-![](https://printfcoder.github.io/myblog/assets/images/blockchain/abc/merkle-tree-diagram.png)
-
-默克尔树为了每一个区块而创建，开始于叶（树的底部）节点，叶子就是一个交易的hash值（比特币使用两次SHA256计算）。叶子的数量必须是偶数的，但是并不是每一个区块都含有偶数个交易。如果有奇数个交易，最后一个交易就会重复（**在默克尔树里是这样，不是区块中！**）。
-
-从底而上，叶子被分成组成一对，它们的hash是串起来的，并且串起来的hash也会生成新的hash。新的hash生成新的树节点。这一过程会一直持续直到只剩下一个节点，也就是树的根节点。根节点的hash就会被当成这些交易的描述存放在区块的头部，然后在工作量证明中会用到。
-
-使用默克尔树的好处就是节点可以清楚与指定交易的关系，而不需要下载整个区块。只需要一个交易hash，默克尔树的根节点hash，还有树的路径即可。
-
-开始撸代码：
-
-```golang
-type MerkleTree struct {
-    RootNode *MerkleNode
-}
-
-type MerkleNode struct {
-    Left  *MerkleNode
-    Right *MerkleNode
-    Data  []byte
-}
-```
-从结构开始，每一个**MerkleNode**都会持有数据和连接到它的分支。**MerkleTree**实际上就是和后面的节点连接的根节点，而它们与其它节点连接，等等。
-
-创建新的节点：
-
-```golang
-func NewMerkleNode(left, right *MerkleNode, data []byte) *MerkleNode {
-    mNode := MerkleNode{}
-
-    if left == nil && right == nil {
-        hash := sha256.Sum256(data)
-        mNode.Data = hash[:]
-    } else {
-        prevHashes := append(left.Data, right.Data...)
-        hash := sha256.Sum256(prevHashes)
-        mNode.Data = hash[:]
-    }
-
-    mNode.Left = left
-    mNode.Right = right
-
-    return &mNode
-}
-```
-每一个节点包含了一些数据。当节点是叶子节点时，数据来自外方（从我们的角度看就是序列化的交易）。当节点连接到其它（左右）节点时，它就会把这左右两个节点的数据串起来，然后计算串起来的hash值作为自己的数据。
-
-```golang
-func NewMerkleTree(data [][]byte) *MerkleTree {
-    var nodes []MerkleNode
-
-    if len(data)%2 != 0 {
-        data = append(data, data[len(data)-1])
-    }
-
-    for _, datum := range data {
-        node := NewMerkleNode(nil, nil, datum)
-        nodes = append(nodes, *node)
-    }
-
-    for i := 0; i < len(data)/2; i++ {
-        var newLevel []MerkleNode
-
-        for j := 0; j < len(nodes); j += 2 {
-            node := NewMerkleNode(&nodes[j], &nodes[j+1], nil)
-            newLevel = append(newLevel, *node)
-        }
-
-        nodes = newLevel
-    }
-
-    mTree := MerkleTree{&nodes[0]}
-
-    return &mTree
-}
-```
-当新的树创建好时，第一件事就是确定是否有偶数个叶子。然后，**数据**（data，交易的序列化数组）会被转换成树叶，并且新树会基于这些叶子长出来。
-
-现在修改**Block.HashTransactions**，它的作用是在工作量证明时获取交易的hash：
-```golang
-func (b *Block) HashTransactions() []byte {
-    var transactions [][]byte
-
-    for _, tx := range b.Transactions {
-        transactions = append(transactions, tx.Serialize())
-    }
-    mTree := NewMerkleTree(transactions)
-
-    return mTree.RootNode.Data
-}
-```
-首先，区块中的交易会串起来，然后被序列化（使用**encoding/gob**），然后用于创建新的默克尔树。该树的根节点会充当该区块的所有交易的标识。
-
-## P2PKH
-
-还有一个问题在这里讨论一下：
-
-我们说过，比特币中使用了*Script脚本*编程语言，它被用在给交易的output加锁，然后交易的input提供数据来解锁output。这个语言很简单，代码也只是一串序列和一些操作符。
-
-看这个例子：
-
-```
-5 2 OP_ADD 7 OP_EQUAL
+```shell
+$ blockchain_go send -from CENTREAL_NODE -to WALLET_1 -amount 10 -mine
+$ blockchain_go send -from CENTREAL_NODE -to WALLET_2 -amount 10 -mine
 ```
 
-**5**，**2**，和**7**是数据。**OP_ADD**和**OP_EQUAL**就是操作符。*Script*代码是可以从左到右被执行的，每一片代码被放到栈中，然后下一个操作符就会用于栈顶的元素。*Script*栈仅是简单的FILO方式使用内存，第一个元素进栈会最后一个出栈，后面的元素会被放到前一个的上面。
+**-mine**指令是说区块会在相同的节点中立马挖出来。我们加个标记是因为在初始时网络中没有矿机节点。
 
-我们拆开上面的代码来逐步分析：
+运行这个节点：
 
-|序号|栈|脚本|
-|--|--|--|
-|1|空|5 2 OP_ADD 7 OP_EQUAL|
-|2|5|2 OP_ADD 7 OP_EQUAL|
-|3|5 2|OP_ADD 7 OP_EQUAL|
-|4|7|7 OP_EQUAL|
-|5|7 7|OP_EQUAL|
-|6|true|empty|
-
-操作**OP_ADD**就是从栈顶先后取出两个元素相加，然后把结果压到栈顶。**OP_EQUAL**同样从栈顶取出两个元素判断相等，把结果压入栈顶。当脚本执行完时，栈顶的元素就是该脚本的执行结果：在我们的这个例子中，结果就是**true**，也即是说脚本成功执行完成。
-
-现在看看比特币中用于支付的脚本：
-
+```shell
+$ blockchain_go startnode
 ```
-<signature> <pubKey> OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+这个节点会一直运行直到场景结束。
+
+### 节点 3001
+
+开始这个节点的区块链，带着上面说到的创世区块。
+
+```shell
+$ cp blockchain_genesis.db blockchain_3001.db
 ```
-这种叫Pay to Public Key Hash（P2PKH），是比特币中用得最广泛的脚本。它会逐个支付给公钥的hash，即会锁住指定公钥下的币。这是**比特币的支付核心**：没有账户，彼此之间没有现金交换；也仅是有一段脚本来检测提供的签名和公钥是否正确。
 
-这段脚本实际上保存有两个部分：
+运行节点：
+```shell
+$ blockchain_go startnode
+```
+它会去中央节点里下载所有的区块。检测所有事情都好了之后，停止节点然后检测余额。
 
-1. 第一段：**<signature> <pubKey>**存放了input的**ScriptSig**栏位。
-2. 第二段：**OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG**存放output的**ScriptPubKey**。
+```shell
+$ blockchain_go getbalance -address WALLET_1
+Balance of 'WALLET_1': 10
 
-因此，这段脚本定义了解锁的逻辑，就是input提供了数据来解锁output。执行这段脚本：
+$ blockchain_go getbalance -address WALLET_2
+Balance of 'WALLET_2': 10
+```
+当然，也可以检测**CENTRAL_NODE中央节点**的余额，因为3001节点已经有它自己的区块链了：
 
-|序号|栈|脚本|
-|--|--|--|
-|1|空|**\<signature\> \<pubKey\> OP_DUP OP_HASH160 \<pubKeyHash\> OP_EQUALVERIFY OP_CHECKSIG**|
-|2|**\<signature\>**|**\<pubKey\> OP_DUP OP_HASH160 \<pubKeyHash\> OP_EQUALVERIFY OP_CHECKSIG**|
-|3|**\<signature\> \<pubKey\>**|**OP_DUP OP_HASH160 \<pubKeyHash\> OP_EQUALVERIFY OP_CHECKSIG**|
-|4|**\<signature\> \<pubKey\> \<pubKey\>**|**OP_HASH160 \<pubKeyHash\> OP_EQUALVERIFY OP_CHECKSIG**|
-|5|**\<signature\> \<pubKey\> \<pubKeyHash\>**|**\<pubKeyHash\> OP_EQUALVERIFY OP_CHECKSIG**|
-|6|**\<signature\> \<pubKey\> \<pubKeyHash\> \<pubKeyHash\>**|**OP_EQUALVERIFY OP_CHECKSIG**|
-|7|**\<signature\> \<pubKey\>**|**OP_CHECKSIG**|
-|8|**true 或 false**|空|
+```shell
+$ blockchain_go getbalance -address CENTRAL_NODE
+Balance of 'CENTRAL_NODE': 10
+```
 
-**OP_DUP**操作会复制栈顶的元素。**OP_HASH160**获取栈顶的元素并使用（**RIPEMD160**）算法计算其hash值，把结果压到栈顶。**OP_EQUALVERIFY**比较栈顶的两个元素，如果不等，则打断脚本。**OP_CHECKSIG**通过计算交易的hash和使用**<signature>**及**<pubKey>**验证交易的签名。后面的操作比较复杂：使用一个被修整过的交易副本，计算它的hash（因为它就是一个被签名了的交易的hash），然后用提供的**<signature>**及**<pubKey>**检测这个签名是否正确。
+### 节点 3002
 
-拥有脚本语言的使得比特币可能成为智能合约平台：这个语言除了能支持每次交易都使用单一的密钥转移比特币，其它的支付场景也成为可能。
+打开新的窗口，设置ID为3002，然后生成钱包，这个是个矿机节点。初始化区块链：
+```shell
+$ cp blockchain_genesis.db blockchain_3002.db
+```
 
-## 总结
+启动节点
+```shell
+$ blockchain_go startnode -miner MINER_WALLET
+```
 
-好了，我们实现了大多数基于区块链加密货币的差关键特性。区块链、地址、挖矿、交易。但是，还有一个赋予这些特性生命的机制，创造了比特币的全局系统，一致性。 下一章我们开始实现区块链的一部分--“去中心化”。静请期待！
+### 节点 3001
+
+发送币：
+```shell
+$ blockchain_go send -from WALLET_1 -to WALLET_3 -amount 1
+$ blockchain_go send -from WALLET_2 -to WALLET_4 -amount 1
+```
+
+### 节点 3002
+很快，转到矿机节点后，可以看到它挖出了新的区块。也检测了中央节点的output。
+
+### 节点 3001
+选择钱包节点，然后启动：
+
+```shell
+$ blockchain_go startnode
+```
+它会下载新挖出的区块。
+
+停下来，然后检测余额：
+
+```shell
+$ blockchain_go getbalance -address WALLET_1
+Balance of 'WALLET_1': 9
+
+$ blockchain_go getbalance -address WALLET_2
+Balance of 'WALLET_2': 9
+
+$ blockchain_go getbalance -address WALLET_3
+Balance of 'WALLET_3': 1
+
+$ blockchain_go getbalance -address WALLET_4
+Balance of 'WALLET_4': 1
+
+$ blockchain_go getbalance -address MINER_WALLET
+Balance of 'MINER_WALLET': 10
+```
+
+这里就是全部了！
+
+## 结论
+这是我们这个系列文章的最后一篇了。应该要实现真正的P2P原型网络，但是确实没有这么多的时间。希望这篇文章能解答一些你关于比特币技术的疑问，并且获得新姿势，你也可以自己去找到答案。还有很多有趣的知识藏在比特币技术中。祝你开车愉快！
+
+P.S. 你可以开始通过实现**addr**消息来完善网络，就如比特币网络协议中描述的一样。这是消息非常重要，因为它可以让节点互相发现彼此。我已经开始实现它了，但是还没有完成。
 
 ## 相关链接
 
-[本文代码][本文代码]
+### 延伸与代码
 
-本序列文章：
+1. [本文代码][本文代码]
+2. [比特币协议](https://en.bitcoin.it/wiki/Protocol_documentation)
+3. [比特币网络](https://en.bitcoin.it/wiki/Network)
+
+### 本序列文章
 
 1. [Golang 区块链入门 第一章 基本概念][本序列第一篇]
 2. [Golang 区块链入门 第二章 工作量证明][本序列第二篇]
@@ -471,16 +610,15 @@ func (b *Block) HashTransactions() []byte {
 4. [Golang 区块链入门 第四章 交易 第一节][本序列第四篇]
 5. [Golang 区块链入门 第五章 地址][本序列第五篇]
 6. [Golang 区块链入门 第六章 交易 第二节][本序列第六篇]
+7. [Golang 区块链入门 第七章 网络][本序列第七篇]
 
-[本序列第一篇]: /myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
-[本序列第二篇]: /myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
-[本序列第三篇]: /myblog/blockchain/abc/2018/03/07/abc-building-blockchain-in-go-part-3-persistence-and-cli/
-[本序列第四篇]: /myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
-[本序列第五篇]: /myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
-[本序列第六篇]: /myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
+[本序列第一篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
+[本序列第二篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
+[本序列第三篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/07/abc-building-blockchain-in-go-part-3-persistence-and-cli/
+[本序列第四篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
+[本序列第五篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
+[本序列第六篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
+[本序列第七篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/20/abc-building-blockchain-in-go-part-7-network/
 
-[原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-6/
-[本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_6
-[比特币地址样例]: https://blockchain.info/address/1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
-[bip-0039]: https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
-[椭圆曲线]: http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/
+[原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-7/
+[本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_7
