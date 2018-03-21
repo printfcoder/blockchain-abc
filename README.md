@@ -4,13 +4,13 @@
 
 [原文][原文]（略有删改）
 
-# 数据库选型
+## 数据库选型
 
 直到现在，我们的区块链实现中还没有用到数据库，我们只是把每次启动程序计算得到的区块储存在内存中。我们不能复用一个之前生成的区块链，也不能与他人分享，因此，现在我们要把它存在磁盘上。
 
 那该选择什么样的数据库？其实任何一种都可以。在[比特币文档][bitcoin_pdf]中，没有说要一个具体的数据库，所以这取决于开发者。[Bitcoin Core](https://github.com/bitcoin/bitcoin)用的是[LevelDB](https://github.com/google/leveldb)。本篇教程中使用`BoltDB`。
 
-# BoltDB
+## BoltDB
 
 BoltDB有如下特性：
 
@@ -35,7 +35,7 @@ BoltDB是基于key/value存储，即是没有像SQL关系性数据库（MySQL、
 
 还有一点比较重要的是，BoltDB是没有数据类型的，key和value都是byte型的数组。因为我们要存储Golang的结构体（比如`Block`），所以会把这些结构体序列化。我们会使用[encoding/gob](https://golang.org/pkg/encoding/gob/)来`序列/解序列化`结构体，当然也可以使用 `JSON`、`XML`、`Protocol Buffers`等方案，使用它主要是简单，而且它也是Golang库标准的一部分。
 
-# 数据结构
+## 数据结构
 
 在实现持久化之前，我们得先搞清楚要怎么存储，先看看Bitcoin Core是怎么搞的。
 
@@ -85,7 +85,7 @@ BoltDB是基于key/value存储，即是没有像SQL关系性数据库（MySQL、
 
 下面开始实现持久化机制
 
-# 序列化
+## 序列化
 
 由于BoltDB只能存储byte数组，所以先给**Block**实现序列化方法。
 
@@ -113,7 +113,7 @@ func DeserializeBlock(d []byte) *Block {
 }
 ```
 
-# 持久化
+## 持久化
 
 我们先从优化 **NewBlockchain** 方法开始。之前这个方法只能创建新的区块链再增加创世区块到链中。现在它加上以下这些能力：
 
@@ -253,7 +253,7 @@ bc.tip = newBlock.Hash
 
 在挖出新块，将其序列化存储到数据库后，把最新的区块hash值更新到 **l** 值中。
 
-# 检查区块
+## 检查区块
 
 到这一步，区块都保存到数据库了，现在可以把区块链重新加载然后把新块加到里面。但是现在不能再打印区块链中的区块了，因为已经不是把区块保存在数组中了。现在修复这个缺陷。
 
@@ -300,7 +300,7 @@ func (i *BlockchainIterator) Next() *Block {
 
 到此，整DB小节完了
 
-# CLI 命令行接口
+## CLI 命令行接口
 
 直到现在，我们的实现还没有提供任何操作接口给外界使用。我们先前的例子中在 **main** 函数中执行新建区块链 **NewBlockchain**，还有新增区块 **bc.AddBlock** 的方法。现在可以改善，增加命令行操作接口了。我们需要如下这样的命令：
 
@@ -484,25 +484,22 @@ PoW: true
 
 
 
-# 本章总结
+### 本章总结
 
 本章我们实现了区块的持久化，还有完善了遍历信息来支持按序打印所有的区块。下一章我们将会实现 **address**，**wallet**，**transaction**。敬请期待！
 
-# 相关链接
+### 相关链接
 
-[本文代码][本文代码]
+#### 延伸与代码
 
-[二三章代码差异](https://github.com/printfcoder/blockchain-abc/compare/part_2...part_3)
+1. [本文代码][本文代码]
+2. [二三章代码差异](https://github.com/printfcoder/blockchain-abc/compare/part_2...part_3)
+3. [bitcoin_pdf][bitcoin_pdf]
+4. [Bitcoin Core](https://github.com/bitcoin/bitcoin)
+5. [Bitcoin 存储](https://en.bitcoin.it/wiki/Bitcoin_Core_0.11_(ch_2):_Data_Storage)
+6. [boltDB](https://github.com/boltdb/bolt)
 
-[bitcoin_pdf][bitcoin_pdf]
-
-[Bitcoin Core](https://github.com/bitcoin/bitcoin)
-
-[Bitcoin 存储](https://en.bitcoin.it/wiki/Bitcoin_Core_0.11_(ch_2):_Data_Storage)
-
-[boltDB](https://github.com/boltdb/bolt)
-
-本序列文章：
+#### 本序列文章
 
 1. [Golang 区块链入门 第一章 基本概念][本序列第一篇]
 2. [Golang 区块链入门 第二章 工作量证明][本序列第二篇]
@@ -510,14 +507,15 @@ PoW: true
 4. [Golang 区块链入门 第四章 交易 第一节][本序列第四篇]
 5. [Golang 区块链入门 第五章 地址][本序列第五篇]
 6. [Golang 区块链入门 第六章 交易 第二节][本序列第六篇]
+7. [Golang 区块链入门 第七章 网络][本序列第七篇]
 
 [原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-3/
 [bitcoin_pdf]: https://bitcoin.org/bitcoin.pdf
 [本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_3
-
 [本序列第一篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
 [本序列第二篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
 [本序列第三篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/07/abc-building-blockchain-in-go-part-3-persistence-and-cli/
 [本序列第四篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
 [本序列第五篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
 [本序列第六篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
+[本序列第七篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/20/abc-building-blockchain-in-go-part-7-network/
