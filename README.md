@@ -1,12 +1,14 @@
+# Golang 区块链入门 第五章 地址
+
 [前面的章节][本序列第四篇]我们开始实现交易。也介绍了和人与人交易的不同：没有账户，也不需要个人信息（名字，户照，社保卡等等），也没有保存在比特币中。但是要有机制能确定你就是交易的output拥有者（能解锁这些被锁住的output的人)，address地址就是干这个的。前面我们使用了比较随意的用户定义字符串作为地址，现在我们实现真正的地址，和在比特币中实现的那样。
 
 [原文][原文]（略有删改）
 
-# 比特币地址
+## 比特币地址
 
 这里有一份比特币地址的[例子1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa][比特币地址样例]。这是第一个比特币的地址，传言就是中本聪本人的比特币。比特币地址是公开的。如果要发送比特币给其他人，就得知道他的地址。但是地址（尽管都是唯一的）不是区分你是钱包的拥有者的东西。事实上，这些地址都是人眼可读的公钥文本。在比特币中，你的标识是一组（存放在你电脑或者其它你指定的地方）上的私钥和公钥对。比特币依赖加密算法的组合创建的密钥，用以保证世界上没有任何一个人可以绕开你物理机上的实体私钥就可以操控你的比特币。现在探讨一下这个算法机制。
 
-# 公钥加密
+## 公钥加密
 
 公钥加密算法使用密钥对--公钥和私钥。公钥不敏感，可以公开给任何人。与此相反，私钥则不应该暴露出来，除了私钥持有者其它人都不能访问私钥，因为这是持有者身份标识。可以这么说，在加密了的世界里，你就是你的私钥。
 
@@ -260,7 +262,7 @@ Balance of '1Lhqun1E9zZZhodiTqxfPQBcwr1CVDV2sy': 0
 
 不错，现在实现交易签名。
 
-# 签名
+## 签名
 
 交易必须被签名，这是比特币中，唯一能保证没有人可以消费别人的币的机制。如果签名不合法，交易也是不合法的。因此，交易也不会被加到区块链中。
 
@@ -578,16 +580,15 @@ $ blockchain_go send -from 1AmVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -to 1NE86r4Esjf53E
 2017/09/12 16:28:15 ERROR: Invalid transaction
 ```
 
-# 总结
+## 总结
 
 我们从前面几章开始讲了这么久来实现比特币中的各种关键特性。我们实现了大多数，除了网络连通，下一章，我们把交易弄完。
 
-# 相关链接
+## 相关链接
 
 [本文代码][本文代码]
 
-
-本序列文章：
+### 本序列文章
 
 1. [Golang 区块链入门 第一章 基本概念][本序列第一篇]
 2. [Golang 区块链入门 第二章 工作量证明][本序列第二篇]
@@ -595,6 +596,7 @@ $ blockchain_go send -from 1AmVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -to 1NE86r4Esjf53E
 4. [Golang 区块链入门 第四章 交易 第一节][本序列第四篇]
 5. [Golang 区块链入门 第五章 地址][本序列第五篇]
 6. [Golang 区块链入门 第六章 交易 第二节][本序列第六篇]
+7. [Golang 区块链入门 第七章 网络][本序列第七篇]
 
 [本序列第一篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/05/abc-building-blockchain-in-go-part-1-basic-prototype/
 [本序列第二篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/06/abc-building-blockchain-in-go-part-2-proof-of-work/
@@ -602,6 +604,7 @@ $ blockchain_go send -from 1AmVdDvvQ977oVCpUqz7zAPUEiXKrX5avR -to 1NE86r4Esjf53E
 [本序列第四篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
 [本序列第五篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
 [本序列第六篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
+[本序列第七篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/20/abc-building-blockchain-in-go-part-7-network/
 
 [原文]: https://jeiwan.cc/posts/building-blockchain-in-go-part-6/
 [本文代码]: https://github.com/printfcoder/blockchain-abc/tree/part_5
