@@ -537,17 +537,15 @@ Balance of 'Ivan': 2
 
 ## 相关链接
 
-[本文代码][本文代码]
+### 延伸与代码
 
-[bitcoin script][script]
+1. [本文代码][本文代码]
+2. [bitcoin script][script]
+3. [交易](https://en.bitcoin.it/wiki/Transaction)
+4. [默克尔树][Merkle_tree]
+5. [Coinbase][Coinbase]
 
-[交易](https://en.bitcoin.it/wiki/Transaction)
-
-[默克尔树][Merkle_tree]
-
-[Coinbase][Coinbase]
-
-本序列文章：
+### 本序列文章
 
 1. [Golang 区块链入门 第一章 基本概念][本序列第一篇]
 2. [Golang 区块链入门 第二章 工作量证明][本序列第二篇]
@@ -555,6 +553,7 @@ Balance of 'Ivan': 2
 4. [Golang 区块链入门 第四章 交易 第一节][本序列第四篇]
 5. [Golang 区块链入门 第五章 地址][本序列第五篇]
 6. [Golang 区块链入门 第六章 交易 第二节][本序列第六篇]
+7. [Golang 区块链入门 第七章 网络][本序列第七篇]
 
 
 <div id="there_is_no_spoon_mean">
@@ -579,3 +578,5 @@ Balance of 'Ivan': 2
 [本序列第四篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/09/abc-building-blockchain-in-go-part-4-transactions-1/
 [本序列第五篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/14/abc-building-blockchain-in-go-part-5-address/
 [本序列第六篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/17/abc-building-blockchain-in-go-part-6-transactions-2/
+[本序列第七篇]: https://printfcoder.github.io/myblog/blockchain/abc/2018/03/20/abc-building-blockchain-in-go-part-7-network/
+
